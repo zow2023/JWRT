@@ -1,4 +1,4 @@
-name: Build openwrt
+name: W6-OFFICIAL-OP
 
 on:
   repository_dispatch:
