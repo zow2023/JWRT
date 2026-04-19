@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
-name: OpenWrt Builder
+name: R3G-HWNAT
 
 on:
   repository_dispatch:
