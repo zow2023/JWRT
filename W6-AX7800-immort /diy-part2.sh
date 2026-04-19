@@ -25,16 +25,16 @@
 # git clone https://github.com/muink/luci-app-einat.git package/luci-app-einat
 
 rm -rf feeds/luci/applications/luci-app-adguardhome
-rm -rf feeds/packages/net/smartdns  
-git clone https://github.com/kenzok78/luci-app-smartdns feeds/packages/net/smartdns
+#rm -rf feeds/packages/net/smartdns  
+#git clone https://github.com/kenzok78/luci-app-smartdns feeds/packages/net/smartdns
 #git clone https://github.com/pymumu/luci-app-smartdns feeds/luci/applications/luci-app-smartdns
 
 # 移除 openwrt feeds 自带的核心包
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box,adguardhome}
 
-#rm -rf feeds/packages/net/dae
-#rm -rf feeds/luci/applications/luci-app-dae
-#rm -rf feeds/luci/applications/luci-app-daed
+rm -rf feeds/packages/net/dae
+rm -rf feeds/luci/applications/luci-app-dae
+rm -rf feeds/luci/applications/luci-app-daed
 #rm -rf feeds/luci/applications/luci-app-homeproxy
 #git clone https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
 
@@ -44,7 +44,8 @@ rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box,adguardho
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
-#rm -rf package/helloworld/luci-app-dae
+rm -rf package/helloworld/luci-app-dae
+rm -rf package/helloworld/luci-app-daed
 rm -rf package/helloworld/dae
 
 #git clone https://github.com/DNSCrypt/dnscrypt-proxy.git feeds/packages/net/dnscrypt-proxy2
@@ -91,7 +92,7 @@ git clone https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/l
 # rm -rf feeds/packages/net/v2ray-geodata
 # git clone https://github.com/QiuSimons/openwrt-mos.git package/openwrt-mos
 
-curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+#curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 #curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 #curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh --no-sfe
 
