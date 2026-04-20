@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: w6-mtk-op
+name: W6-X-OP
 
 on:
   repository_dispatch:
