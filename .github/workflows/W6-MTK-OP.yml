@@ -20,12 +20,12 @@ on:
         default: 'false'
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: openwrt-25.12
+  REPO_URL: https://github.com/zow2023/immortalwrt-mt798x-6.6
+  REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: W6/feeds.conf.default
-  CONFIG_FILE: W6/im2512.config
+  CONFIG_FILE: W6/mtkw6.config
   DIY_P1_SH: W6/diy-part1.sh
-  DIY_P2_SH: W6/diy-part3.sh
+  DIY_P2_SH: W6/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
