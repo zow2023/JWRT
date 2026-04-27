@@ -21,7 +21,7 @@ on:
 
 env:
   REPO_URL: https://github.com/x-wrt/x-wrt
-  REPO_BRANCH: 25.04_b202511200721
+  REPO_BRANCH: 26.04_b202604250947 
   FEEDS_CONF: W6/feeds.conf.default
   CONFIG_FILE: W6/w6x.config
   DIY_P1_SH: W6/diy-part1.sh
@@ -42,71 +42,22 @@ jobs:
       uses: actions/checkout@v4 
 
           
-    - name: Initialization environment
+    - name: 🚀 优化环境与清理空间
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo docker image prune --all --force
+        # 仅保留最核心的清理，避免无效 IO
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install build-essential clang llvm flex bison g++ gawk \
              gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev dos2unix dwarves quilt npm jq \
-             python3-setuptools rsync swig unzip zlib1g-dev file wget xsltproc zlib1g-dev zip zstd
+             python3-setuptools rsync swig unzip zlib1g-dev file wget xsltproc zip zstd
         sudo npm install -g pnpm
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-
-    - name: 🧹 Free Up Disk Space (Optimized for OpenWrt)
-      run: |
-        echo "🚀 Disk space before cleanup:"
-        df -h
-        
-        # 针对 OpenWrt 编译的特别清理
-        sudo rm -rf \
-        /usr/share/dotnet \
-        /opt/hostedtoolcache/CodeQL \
-        /usr/local/lib/android \
-        /opt/ghc \
-        /usr/local/.ghcup \
-        /usr/local/share/boost \
-        /usr/local/share/powershell \
-        /usr/local/lib/jvm \
-        /usr/lib/firefox \
-        /usr/lib/google-cloud-sdk \
-        /usr/share/swift \
-        /usr/share/miniconda \
-        /usr/share/az* \
-        /usr/share/gradle* \
-        /usr/share/kotlin* \
-        /usr/share/maven \
-        /usr/share/php* \
-        /usr/share/ruby* \
-        /usr/share/sbt \
-        /usr/share/apache-maven* \
-        /usr/share/rust \
-        /usr/share/virtualenv \
-        /usr/share/postgresql* \
-        /usr/share/docker* \
-        /usr/share/phantomjs \
-        /usr/share/selenium \
-        /usr/share/playwright \
-        /usr/share/pyenv
-        # 彻底清理 apt
-        sudo -E apt-get -y purge $(dpkg -l | grep '^rc' | awk '{print $2}')
-        sudo -E apt-get -y autoremove --purge
-        sudo -E apt-get -y clean
-        sudo rm -rf /var/lib/apt/lists/*
-        # 清理日志和缓存
-        sudo journalctl --vacuum-time=1s
-        sudo rm -rf /var/log/*
-        sudo rm -rf /var/cache/*
-        sudo rm -rf /tmp/*
-        sudo rm -rf /snap/*
-        
-        echo "🎉 Disk space after cleanup:"
-        df -h
 
     
     - name: Clone source code
