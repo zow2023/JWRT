@@ -10,17 +10,6 @@
 # See /LICENSE for more information.
 #
 
-## 生成 MT7986 (FIRST_IF) 的头文件
-#python3 -c '
-#import os
-#with open("package/mtk/drivers/mt_wifi/files/mt7986-predator-w6/MT7986_ePAeLNA_EEPROM_AX7800.bin", "rb") as f:
-#    data = f.read()
-#with open("package/mtk/drivers/mt_wifi/src/mt_wifi/embedded/include/eeprom/mt7986_e2p_ePAeLNA.h", "w") as out:
-#    out.write("static const UCHAR MT7986_E2PImage_ePAeLNA[] = {\n")
-#    out.write(", ".join([f"0x{b:02x}" for b in data]))
-#    out.write("\n};\n")
-#'
-
 #git clone https://github.com/kiddin9/luci-app-dnsfilter package/luic-app-dnsfilter
 #git clone https://github.com/sirpdboy/luci-app-parentcontrol package/luci-app-parentcontrol
 #git clone https://github.com/4IceG/luci-app-timecontrol package/luci-app-timecontrol
@@ -44,10 +33,10 @@ rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
 
-rm -rf feeds/luci/applications/luci-app-dae
+#rm -rf feeds/luci/applications/luci-app-dae
 #rm -rf feeds/luci/applications/luci-app-daed
 rm -rf feeds/luci/applications/luci-app-homeproxy
-rm -rf feeds/packages/net/{dae,daed}
+#rm -rf feeds/packages/net/{dae,daed}
 
 git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
 
@@ -94,5 +83,5 @@ sed -i 's/192.168.15.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 #sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
 
 # Modify hostname
-sed -i 's/OpenWrt/W6-WRT/g' package/base-files/files/bin/config_generate
+sed -i 's/OpenWrt/E8450/g' package/base-files/files/bin/config_generate
 #sed -i 's/OpenWrt/W6-WRT/g' package/base-files/files/bin/config_generate
