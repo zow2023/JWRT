@@ -10,7 +10,7 @@ on:
         default: 'false'
 
 env:
-  FEEDS_CONF: feeds.conf.default
+  FEEDS_CONF: E8450/feeds.conf.default
   CONFIG_FILE: E8450/8450xa.config
   DIY_P1_SH: E8450/diy-part1.sh
   DIY_P2_SH: E8450/diy-part2.sh
