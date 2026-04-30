@@ -11,9 +11,9 @@ on:
 
 env:
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: w6x.config
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
+  CONFIG_FILE: E8450/8450xa.config
+  DIY_P1_SH: E8450/diy-part1.sh
+  DIY_P2_SH: E8450/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
@@ -77,7 +77,7 @@ jobs:
         sudo -E mkdir -p /mnt/work
         sudo -E chmod 777 /mnt/work /mnt/work_dir /data_dir
         sudo -E mergerfs -o defaults,allow_other,use_ino,category.create=mfs /mnt/work_dir:/data_dir /mnt/work
-        git clone --depth 1 --branch 25.04_b202511200721 https://github.com/x-wrt/x-wrt.git /mnt/work/openwrt
+        git clone --depth 1 --branch 26.04_b202604250947 https://github.com/x-wrt/x-wrt.git /mnt/work/openwrt
         
      - name: Load custom feeds
        run: |
@@ -107,7 +107,7 @@ jobs:
 
      - name: Patch Kernel Config for NETKIT
        run: |
-          KERNEL_CONF="/mnt/work/openwrt/target/linux/mediatek/filogic/config-6.12"
+          KERNEL_CONF="/mnt/work/openwrt/target/linux/mediatek/mt7622/config-6.12"
 
           set_kernel_config() {
             local key=$1
