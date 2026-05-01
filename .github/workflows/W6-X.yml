@@ -118,6 +118,14 @@ jobs:
           # 验证写入结果
           grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO" "$KERNEL_CONF"
 
+    - name: Patch missing kernel config options
+      run: |
+          for cfg in $(find target/linux/mediatek -name "config-6*"); do
+            echo "Checking $cfg"
+            grep -q "CONFIG_NET_SCH_BPF" "$cfg" || \
+              echo "CONFIG_NET_SCH_BPF=n" >> "$cfg"
+          done      
+
     - name: Download package
       id: package
       run: |
