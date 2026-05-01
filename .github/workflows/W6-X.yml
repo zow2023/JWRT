@@ -21,7 +21,7 @@ on:
 
 env:
   REPO_URL: https://github.com/x-wrt/x-wrt
-  REPO_BRANCH: 26.04_b202604250947 
+  REPO_BRANCH: 26.04_b202605010101 
   FEEDS_CONF: W6/feeds.conf.default
   CONFIG_FILE: W6/w6x.config
   DIY_P1_SH: W6/diy-part1.sh
