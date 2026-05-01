@@ -11,7 +11,7 @@ on:
 
 env:
   FEEDS_CONF: E8450/feeds.conf.default
-  CONFIG_FILE: E8450/8450xa.config
+  CONFIG_FILE: E8450/x.config
   DIY_P1_SH: E8450/diy-part-1.sh
   DIY_P2_SH: E8450/diy-part-2.sh
   UPLOAD_BIN_DIR: false
