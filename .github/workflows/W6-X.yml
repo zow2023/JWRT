@@ -102,30 +102,29 @@ jobs:
 
     - name: Patch Kernel Config
       run: |
-          cd openwrt
-          KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
+        cd openwrt
+        KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
 
-          set_kernel_config() {
+        set_kernel_config() {
           local key=$1 val=$2 file=$3
-          sed -i -E "/^.*${key}.*/d" "$file"
-          echo "${key}=${val}" >> "$file"
-          }
+          if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
+            sed -i -E "s|^(# )?${key}(=.*| is not set)|${key}=${val}|" "$file"
+          else
+            echo "${key}=${val}" >> "$file"
+          fi
+        }
 
-          set_kernel_config "CONFIG_BPF_SYSCALL"    "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NETKIT"         "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_DEBUG_INFO_BTF" "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NET_SCH_BPF"    "n" "$KERNEL_CONF"
+        set_kernel_config "CONFIG_BPF_SYSCALL"    "y" "$KERNEL_CONF"
+        set_kernel_config "CONFIG_NETKIT"         "y" "$KERNEL_CONF"
+        set_kernel_config "CONFIG_DEBUG_INFO_BTF" "y" "$KERNEL_CONF"
+        set_kernel_config "CONFIG_NET_SCH_BPF"    "n" "$KERNEL_CONF"
 
-          echo "=== 验证 ==="
-          grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO|CONFIG_NET_SCH_BPF" "$KERNEL_CONF"
+        echo "=== 验证 ==="
+        grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO_BTF|CONFIG_NET_SCH_BPF" "$KERNEL_CONF"
+    
+        echo "=== 确认 iptables 相关未被误改（应为 =m） ==="
+        grep "IP_NF_IPTABLES\|NF_CONNTRACK\|NF_TABLES" "$KERNEL_CONF" | head -20
 
-    - name: Patch missing kernel config options
-      run: |
-          for cfg in $(find target/linux/mediatek -name "config-6*"); do
-            echo "Checking $cfg"
-            grep -q "CONFIG_NET_SCH_BPF" "$cfg" || \
-              echo "CONFIG_NET_SCH_BPF=n" >> "$cfg"
-          done      
 
     - name: Download package
       id: package
