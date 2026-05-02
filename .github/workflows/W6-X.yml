@@ -103,7 +103,7 @@ jobs:
     - name: Patch Kernel Config
       run: |
         cd openwrt
-        KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
+        KERNEL_CONF="target/linux/mediatek/filogic/config-6.18"
 
         set_kernel_config() {
           local key=$1 val=$2 file=$3
