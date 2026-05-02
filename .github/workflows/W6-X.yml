@@ -100,23 +100,24 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: Patch Kernel Config for NETKIT
-      run: |
-          KERNEL_CONF="openwrt/target/linux/mediatek/filogic/config-6.18"
+    - name: Patch Kernel Config
+       run: |
+          cd /mnt/work/openwrt
+          KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
+
           set_kernel_config() {
-            local key=$1
-            local file=$2
-            if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
-              sed -i -E "s|^.*${key}.*|${key}=y|" "$file"
-            else
-              echo "${key}=y" >> "$file"
-            fi
+          local key=$1 val=$2 file=$3
+          sed -i -E "/^.*${key}.*/d" "$file"
+          echo "${key}=${val}" >> "$file"
           }
-          set_kernel_config "CONFIG_BPF_SYSCALL"    "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NETKIT"         "$KERNEL_CONF"
-          set_kernel_config "CONFIG_DEBUG_INFO_BTF" "$KERNEL_CONF"
-          # 验证写入结果
-          grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO" "$KERNEL_CONF"
+
+          set_kernel_config "CONFIG_BPF_SYSCALL"    "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_NETKIT"         "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_DEBUG_INFO_BTF" "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_NET_SCH_BPF"    "n" "$KERNEL_CONF"
+
+          echo "=== 验证 ==="
+          grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO|CONFIG_NET_SCH_BPF" "$KERNEL_CONF"
 
     - name: Patch missing kernel config options
       run: |
