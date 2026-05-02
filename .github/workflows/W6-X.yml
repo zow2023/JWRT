@@ -116,7 +116,7 @@ jobs:
 
     - name: Sync kernel config non-interactively
       run: |
-        cd /mnt/work/openwrt
+        cd openwrt
         LINUX_DIR=$(find build_dir -maxdepth 5 -name "linux-6.*" -type d | head -n 1)
         if [ -d "$LINUX_DIR" ]; then
           echo "Found: $LINUX_DIR"
