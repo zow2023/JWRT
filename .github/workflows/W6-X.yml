@@ -101,7 +101,7 @@ jobs:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: Patch Kernel Config
-       run: |
+      run: |
           cd /mnt/work/openwrt
           KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
 
