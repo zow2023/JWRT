@@ -105,27 +105,14 @@ jobs:
            cd /mnt/work/openwrt
            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' feeds/packages/lang/rust/Makefile
 
-     - name: Patch Kernel Config
+     - name: Fix kernel syncconfig interactive prompt
        run: |
           cd /mnt/work/openwrt
-          KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
-          set_kernel_config() {
-            local key=$1 val=$2 file=$3
-            if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
-              sed -i -E "s|^(# )?${key}(=.*| is not set)|${key}=${val}|" "$file"
-            else
-              echo "${key}=${val}" >> "$file"
-            fi
-          }
-          set_kernel_config "CONFIG_BPF_SYSCALL"       "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_BPF_JIT"           "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_BPF_JIT_ALWAYS_ON" "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NET_CLS_BPF"       "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NET_SCH_INGRESS"   "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NET_SCH_CLSACT"    "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NETKIT"            "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_DEBUG_INFO_BTF"    "y" "$KERNEL_CONF"
-          
+          sed -i 's|\($(MAKE) $(KERNEL_MAKEOPTS)\) syncconfig|\1 olddefconfig; \1 syncconfig|g' \
+              include/kernel-build.mk
+          echo "--- patched lines in include/kernel-build.mk ---"
+          grep -n "olddefconfig\|syncconfig" include/kernel-build.mk
+         
      - name: Download package
        id: package
        run: |
