@@ -111,9 +111,12 @@ jobs:
           KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
 
           set_kernel_config() {
-          local key=$1 val=$2 file=$3
-          sed -i -E "/^.*${key}.*/d" "$file"
-          echo "${key}=${val}" >> "$file"
+            local key=$1 val=$2 file=$3
+          if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
+            sed -i -E "s|^(# )?${key}(=.*| is not set)|${key}=${val}|" "$file"
+          else
+            echo "${key}=${val}" >> "$file"
+          fi
           }
 
           set_kernel_config "CONFIG_BPF_SYSCALL"    "y" "$KERNEL_CONF"
