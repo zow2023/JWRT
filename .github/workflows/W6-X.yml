@@ -111,22 +111,20 @@ jobs:
 
     - name: Prepare kernel (stage 1)
       run: |
-        cd openwrt
+        cd /workdir/openwrt
         make target/linux/prepare -j$(nproc) V=s || true
 
     - name: Sync kernel config non-interactively
       run: |
-        cd openwrt
+        cd /workdir/openwrt
         LINUX_DIR=$(find build_dir -maxdepth 5 -name "linux-6.*" -type d | head -n 1)
         if [ -d "$LINUX_DIR" ]; then
           echo "Found: $LINUX_DIR"
-          TOOLCHAIN=$(find staging_dir -name "aarch64-*-linux-musl-gcc" | head -n 1)
-          CROSS=$(dirname "$TOOLCHAIN")/$(basename "$TOOLCHAIN" | sed 's/gcc$//')
-          echo "CROSS_COMPILE: $CROSS"
           yes "" | make -C "$LINUX_DIR" \
             ARCH=arm64 \
             CROSS_COMPILE="$CROSS" \
             syncconfig
+            grep "NET_SCH_BPF" "$LINUX_DIR/.config" || echo "未找到 NET_SCH_BPF"
          else
            echo "ERROR: build_dir not found"
            exit 1
