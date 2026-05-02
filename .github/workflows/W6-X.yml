@@ -100,32 +100,6 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: Patch Kernel Config
-      run: |
-        cd openwrt
-        KERNEL_CONF="target/linux/mediatek/filogic/config-6.18"
-
-        set_kernel_config() {
-          local key=$1 val=$2 file=$3
-          if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
-            sed -i -E "s|^(# )?${key}(=.*| is not set)|${key}=${val}|" "$file"
-          else
-            echo "${key}=${val}" >> "$file"
-          fi
-        }
-
-        set_kernel_config "CONFIG_BPF_SYSCALL"    "y" "$KERNEL_CONF"
-        set_kernel_config "CONFIG_NETKIT"         "y" "$KERNEL_CONF"
-        set_kernel_config "CONFIG_DEBUG_INFO_BTF" "y" "$KERNEL_CONF"
-        set_kernel_config "CONFIG_NET_SCH_BPF"    "n" "$KERNEL_CONF"
-
-        echo "=== 验证 ==="
-        grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO_BTF|CONFIG_NET_SCH_BPF" "$KERNEL_CONF"
-    
-        echo "=== 确认 iptables 相关未被误改（应为 =m） ==="
-        grep "IP_NF_IPTABLES\|NF_CONNTRACK\|NF_TABLES" "$KERNEL_CONF" | head -20
-
-
     - name: Download package
       id: package
       run: |
@@ -135,6 +109,29 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
+    - name: Prepare kernel (stage 1)
+      run: |
+        cd openwrt
+        make target/linux/prepare -j$(nproc) V=s || true
+
+    - name: Sync kernel config non-interactively
+      run: |
+        cd /mnt/work/openwrt
+        LINUX_DIR=$(find build_dir -maxdepth 5 -name "linux-6.*" -type d | head -n 1)
+        if [ -d "$LINUX_DIR" ]; then
+          echo "Found: $LINUX_DIR"
+          TOOLCHAIN=$(find staging_dir -name "aarch64-*-linux-musl-gcc" | head -n 1)
+          CROSS=$(dirname "$TOOLCHAIN")/$(basename "$TOOLCHAIN" | sed 's/gcc$//')
+          echo "CROSS_COMPILE: $CROSS"
+          yes "" | make -C "$LINUX_DIR" \
+            ARCH=arm64 \
+            CROSS_COMPILE="$CROSS" \
+            syncconfig
+         else
+           echo "ERROR: build_dir not found"
+           exit 1
+         fi
+    
     - name: Compile the firmware
       id: compile
       run: |
