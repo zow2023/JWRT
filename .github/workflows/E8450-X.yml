@@ -105,14 +105,23 @@ jobs:
            cd /mnt/work/openwrt
            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' feeds/packages/lang/rust/Makefile
 
-     - name: Fix kernel syncconfig interactive prompt
+     - name: Patch Kernel Config
        run: |
           cd /mnt/work/openwrt
-          sed -i 's|\($(MAKE) $(KERNEL_MAKEOPTS)\) syncconfig|\1 olddefconfig; \1 syncconfig|g' \
-              include/kernel-build.mk
-          echo "--- patched lines in include/kernel-build.mk ---"
-          grep -n "olddefconfig\|syncconfig" include/kernel-build.mk
-         
+          KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
+          grep -qE "^CONFIG_NETKIT=" "$KERNEL_CONF" \
+            || echo "CONFIG_NETKIT=y" >> "$KERNEL_CONF"
+          echo "=== 验证 ==="
+          grep "CONFIG_NETKIT" "$KERNEL_CONF"
+
+     - name: Patch missing kernel config options
+       run: |
+          for cfg in $(find target/linux/mediatek -name "config-6*"); do
+            echo "Checking $cfg"
+            grep -q "CONFIG_NET_SCH_BPF" "$cfg" || \
+              echo "CONFIG_NET_SCH_BPF=n" >> "$cfg"
+          done     
+           
      - name: Download package
        id: package
        run: |
