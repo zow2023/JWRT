@@ -109,23 +109,22 @@ jobs:
        run: |
           cd /mnt/work/openwrt
           KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
-
           set_kernel_config() {
             local key=$1 val=$2 file=$3
-          if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
-            sed -i -E "s|^(# )?${key}(=.*| is not set)|${key}=${val}|" "$file"
-          else
-            echo "${key}=${val}" >> "$file"
-          fi
+            if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
+              sed -i -E "s|^(# )?${key}(=.*| is not set)|${key}=${val}|" "$file"
+            else
+              echo "${key}=${val}" >> "$file"
+            fi
           }
-
-          set_kernel_config "CONFIG_BPF_SYSCALL"    "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NETKIT"         "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_DEBUG_INFO_BTF" "y" "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NET_SCH_BPF"    "n" "$KERNEL_CONF"
-
-          echo "=== 验证 ==="
-          grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO|CONFIG_NET_SCH_BPF" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_BPF_SYSCALL"       "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_BPF_JIT"           "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_BPF_JIT_ALWAYS_ON" "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_NET_CLS_BPF"       "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_NET_SCH_INGRESS"   "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_NET_SCH_CLSACT"    "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_NETKIT"            "y" "$KERNEL_CONF"
+          set_kernel_config "CONFIG_DEBUG_INFO_BTF"    "y" "$KERNEL_CONF"
           
      - name: Download package
        id: package
