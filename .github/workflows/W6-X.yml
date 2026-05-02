@@ -100,31 +100,23 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         
-    - name: Patch Kernel Config for NETKIT
-      run: |
-          KERNEL_CONF="openwrt/target/linux/mediatek/filogic/config-6.18"
-          set_kernel_config() {
-            local key=$1
-            local file=$2
-            if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
-              sed -i -E "s|^.*${key}.*|${key}=y|" "$file"
-            else
-              echo "${key}=y" >> "$file"
-            fi
-          }
-          set_kernel_config "CONFIG_BPF_SYSCALL"    "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NETKIT"         "$KERNEL_CONF"
-          set_kernel_config "CONFIG_DEBUG_INFO_BTF" "$KERNEL_CONF"
-          # 验证写入结果
-          grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO" "$KERNEL_CONF"
-
-    - name: Fix kernel syncconfig interactive prompt
+    - name: Patch Kernel Config
       run: |
           cd openwrt
-          sed -i 's|\($(MAKE) $(KERNEL_MAKEOPTS)\) syncconfig|\1 olddefconfig; \1 syncconfig|g' \
-              include/kernel-build.mk
-          echo "--- patched lines in include/kernel-build.mk ---"
-          grep -n "olddefconfig\|syncconfig" include/kernel-build.mk
+          KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
+          grep -qE "^CONFIG_NETKIT=" "$KERNEL_CONF" \
+            || echo "CONFIG_NETKIT=y" >> "$KERNEL_CONF"
+          echo "=== 验证 ==="
+          grep "CONFIG_NETKIT" "$KERNEL_CONF"
+          
+    - name: Patch missing kernel config options
+      run: |
+          cd openwrt
+          for cfg in $(find target/linux/mediatek -name "config-6*"); do
+            echo "Checking $cfg"
+            grep -q "CONFIG_NET_SCH_BPF" "$cfg" || \
+              echo "CONFIG_NET_SCH_BPF=n" >> "$cfg"
+          done
           
     - name: Download package
       id: package
