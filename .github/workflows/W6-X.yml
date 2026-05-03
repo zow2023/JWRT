@@ -103,7 +103,7 @@ jobs:
     - name: Patch Kernel Config
       run: |
           cd openwrt
-          KERNEL_CONF="target/linux/mediatek/mt7622/config-6.18"
+          KERNEL_CONF="target/linux/mediatek/filogic/config-6.18"
           grep -qE "^CONFIG_NETKIT=" "$KERNEL_CONF" \
             || echo "CONFIG_NETKIT=y" >> "$KERNEL_CONF"
           echo "=== 验证 ==="
