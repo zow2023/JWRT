@@ -111,11 +111,15 @@ jobs:
           
     - name: Patch missing kernel config options
       run: |
-          cd openwrt
+          cd /mnt/work/openwrt
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
             echo "Checking $cfg"
-            grep -q "CONFIG_NET_SCH_BPF" "$cfg" || \
-              echo "CONFIG_NET_SCH_BPF=n" >> "$cfg"
+            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
+            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
+            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
+            echo "CONFIG_BPF_JIT=y" >> "$cfg"
           done
           
     - name: Download package
