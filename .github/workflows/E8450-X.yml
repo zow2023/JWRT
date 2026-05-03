@@ -77,7 +77,7 @@ jobs:
         sudo -E mkdir -p /mnt/work
         sudo -E chmod 777 /mnt/work /mnt/work_dir /data_dir
         sudo -E mergerfs -o defaults,allow_other,use_ino,category.create=mfs /mnt/work_dir:/data_dir /mnt/work
-        git clone --depth 1 --branch 26.04_b202604250947 https://github.com/x-wrt/x-wrt.git /mnt/work/openwrt
+        git clone --depth 1 --branch 26.04_b202605010101 https://github.com/x-wrt/x-wrt.git /mnt/work/openwrt
         
      - name: Load custom feeds
        run: |
@@ -119,8 +119,12 @@ jobs:
           cd /mnt/work/openwrt
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
             echo "Checking $cfg"
-            grep -q "CONFIG_NET_SCH_BPF" "$cfg" || \
-              echo "CONFIG_NET_SCH_BPF=n" >> "$cfg"
+            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
+            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
+            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
+            echo "CONFIG_BPF_JIT=y" >> "$cfg"
           done     
            
      - name: Download package
