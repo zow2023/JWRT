@@ -10,10 +10,10 @@ on:
         default: 'false'
 
 env:
-  FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: w6.config
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
+  FEEDS_CONF: W6/feeds.conf.default
+  CONFIG_FILE: W6/of25123.config
+  DIY_P1_SH: W6/diy-part1.sh
+  DIY_P2_SH: W6/diy-part3.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
@@ -77,7 +77,7 @@ jobs:
         sudo -E mkdir -p /mnt/work
         sudo -E chmod 777 /mnt/work /mnt/work_dir /data_dir
         sudo -E mergerfs -o defaults,allow_other,use_ino,category.create=mfs /mnt/work_dir:/data_dir /mnt/work
-        git clone --depth 1 --branch v25.12.2 https://github.com/openwrt/openwrt/ /mnt/work/openwrt
+        git clone --depth 1 --branch v25.12.3 https://github.com/openwrt/openwrt/ /mnt/work/openwrt
         
      - name: Load custom feeds
        run: |
@@ -114,23 +114,27 @@ jobs:
            # 验证插入成功
            grep "PKG_FIXUP" package/libs/libnftnl/Makefile
 
-     - name: Patch Kernel Config for NETKIT
+     - name: Patch Kernel Config
        run: |
-          KERNEL_CONF="/mnt/work/openwrt/target/linux/mediatek/filogic/config-6.12"
-          set_kernel_config() {
-            local key=$1
-            local file=$2
-            if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
-              sed -i -E "s|^.*${key}.*|${key}=y|" "$file"
-            else
-              echo "${key}=y" >> "$file"
-            fi
-          }
-          set_kernel_config "CONFIG_BPF_SYSCALL"    "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NETKIT"         "$KERNEL_CONF"
-          set_kernel_config "CONFIG_DEBUG_INFO_BTF" "$KERNEL_CONF"
-          # 验证写入结果
-          grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO" "$KERNEL_CONF"
+          cd /mnt/work/openwrt
+          KERNEL_CONF="target/linux/mediatek/filogic/config-6.12"
+          grep -qE "^CONFIG_NETKIT=" "$KERNEL_CONF" \
+            || echo "CONFIG_NETKIT=y" >> "$KERNEL_CONF"
+          echo "=== 验证 ==="
+          grep "CONFIG_NETKIT" "$KERNEL_CONF"
+
+     - name: Patch missing kernel config options
+       run: |
+          cd /mnt/work/openwrt
+          for cfg in $(find target/linux/mediatek -name "config-6*"); do
+            echo "Checking $cfg"
+            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
+            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
+            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
+            echo "CONFIG_BPF_JIT=y" >> "$cfg"
+          done     
           
            
      - name: Download package
