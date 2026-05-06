@@ -20,10 +20,10 @@ on:
         default: 'false'
 
 env:
-  REPO_URL: https://github.com/zow2023/immortalwrt-mt798x-6.6
-  REPO_BRANCH: openwrt-24.10-6.6
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-25.12
   FEEDS_CONF: W6/feeds.conf.default
-  CONFIG_FILE: W6/mtkw6.config
+  CONFIG_FILE: W6/im2512.config
   DIY_P1_SH: W6/diy-part1.sh
   DIY_P2_SH: W6/diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -100,23 +100,27 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: Patch Kernel Config for NETKIT
+    - name: Patch Kernel Config
       run: |
-          KERNEL_CONF="openwrt/target/linux/mediatek/filogic/config-6.12"
-          set_kernel_config() {
-            local key=$1
-            local file=$2
-            if grep -qE "^${key}=|^# ${key} is not set" "$file"; then
-              sed -i -E "s|^.*${key}.*|${key}=y|" "$file"
-            else
-              echo "${key}=y" >> "$file"
-            fi
-          }
-          set_kernel_config "CONFIG_BPF_SYSCALL"    "$KERNEL_CONF"
-          set_kernel_config "CONFIG_NETKIT"         "$KERNEL_CONF"
-          set_kernel_config "CONFIG_DEBUG_INFO_BTF" "$KERNEL_CONF"
-          # 验证写入结果
-          grep -E "CONFIG_BPF_SYSCALL|CONFIG_NETKIT|CONFIG_DEBUG_INFO" "$KERNEL_CONF"
+          cd openwrt
+          KERNEL_CONF="target/linux/mediatek/filogic/config-6.12"
+          grep -qE "^CONFIG_NETKIT=" "$KERNEL_CONF" \
+            || echo "CONFIG_NETKIT=y" >> "$KERNEL_CONF"
+          echo "=== 验证 ==="
+          grep "CONFIG_NETKIT" "$KERNEL_CONF"
+          
+    - name: Patch missing kernel config options
+      run: |
+          cd openwrt
+          for cfg in $(find target/linux/mediatek -name "config-6*"); do
+            echo "Checking $cfg"
+            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
+            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
+            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
+            echo "CONFIG_BPF_JIT=y" >> "$cfg"
+          done
 
     - name: Download package
       id: package
