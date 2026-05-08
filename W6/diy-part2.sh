@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
- 生成 MT7986 (FIRST_IF) 的头文件
+#生成 MT7986 (FIRST_IF) 的头文件
 python3 -c '
 import os
 with open("package/mtk/drivers/mt_wifi/files/mt7986-predator-w6/MT7986_ePAeLNA_EEPROM_AX7800.bin", "rb") as f:
