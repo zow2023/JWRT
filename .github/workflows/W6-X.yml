@@ -103,23 +103,23 @@ jobs:
     - name: Patch Kernel Config
       run: |
           cd openwrt
-          KERNEL_CONF="target/linux/mediatek/filogic/config-6.18"
-          grep -qE "^CONFIG_NETKIT=" "$KERNEL_CONF" \
-            || echo "CONFIG_NETKIT=y" >> "$KERNEL_CONF"
-          echo "=== 验证 ==="
-          grep "CONFIG_NETKIT" "$KERNEL_CONF"
-          
-    - name: Patch missing kernel config options
-      run: |
-          cd openwrt
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
             echo "Checking $cfg"
+
             sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
             echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
+
             sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
             echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
+
             sed -i '/CONFIG_BPF_JIT/d' "$cfg"
             echo "CONFIG_BPF_JIT=y" >> "$cfg"
+
+            sed -i '/CONFIG_NETKIT/d' "$cfg"
+            echo "CONFIG_NETKIT=y" >> "$cfg"
+
+            sed -i '/NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
+            echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
           done
           
     - name: Download package
