@@ -20,8 +20,8 @@ on:
         default: 'false'
 
 env:
-  REPO_URL: https://github.com/zow2023/immortalwrt-mt798x-6.6
-  REPO_BRANCH: openwrt-24.10-6.6
+  REPO_URL: https://github.com/zow2023/immortalwrt-mt798x
+  REPO_BRANCH: openwrt-21.02
   FEEDS_CONF: W6/feeds.conf.default
   CONFIG_FILE: W6/mtkw6.config
   DIY_P1_SH: W6/diy-part1.sh
