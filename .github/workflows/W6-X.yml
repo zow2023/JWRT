@@ -53,9 +53,6 @@ jobs:
              gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev dos2unix dwarves quilt npm jq \
              python3-setuptools rsync swig unzip zlib1g-dev file wget xsltproc zip zstd \
              autotools-dev autoconf automake libtool
-
-        sudo ln -sf $(which automake) /usr/bin/automake-1.17
-        sudo ln -sf $(which aclocal) /usr/bin/aclocal-1.17
         
         sudo npm install -g pnpm
         sudo -E apt-get -qq autoremove --purge
@@ -89,7 +86,15 @@ jobs:
       run: |  
         cd openwrt
         sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' feeds/packages/lang/rust/Makefile
-
+    - name: Fix libnftnl autotools version mismatch
+      run: |
+           cd openwrt
+           # 在 libnftnl Makefile 中插入 PKG_FIXUP:=autoreconf
+           grep -q "PKG_FIXUP" package/libs/libnftnl/Makefile || \
+           sed -i '/^PKG_INSTALL/i PKG_FIXUP:=autoreconf' package/libs/libnftnl/Makefile
+           # 验证插入成功
+           grep "PKG_FIXUP" package/libs/libnftnl/Makefile
+           
     - name: Load custom configuration
       run: |
         [ -e files ] && mv files openwrt/files
