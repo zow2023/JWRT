@@ -145,13 +145,6 @@ jobs:
            make download -j$(nproc)
            find dl -size -1024c -exec ls -l {} \;
            find dl -size -1024c -exec rm -f {} \;
-           
-     - name: Patch kernel config for new Kconfig options
-       run: |
-           CONFIG="target/linux/mediatek/mt7622/config-6.12"
-           cd /mnt/work/openwrt
-           grep -q "NF_CONNTRACK_CHAIN_EVENTS" $CONFIG || \
-           echo "# CONFIG_NF_CONNTRACK_CHAIN_EVENTS is not set" >> $CONFIG
              
      - name: Compile the firmware
        id: compile
