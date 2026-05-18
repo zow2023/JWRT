@@ -10,12 +10,6 @@
 # See /LICENSE for more information.
 #
 
-#git clone https://github.com/gSpotx2f/luci-app-cpu-status package/luci-app-cpu-status
-#git clone https://github.com/gSpotx2f/luci-app-cpu-perf package/luci-app-cpu-perf
-#git clone https://github.com/gSpotx2f/luci-app-interfaces-statistics package/luci-app-interfaces-statistics
-#git clone https://github.com/gSpotx2f/luci-app-temp-status package/luci-app-temp-status
-#git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netports
-
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
@@ -42,3 +36,11 @@ sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
 # Modify hostname
 sed -i 's/OpenWrt/W6-WRT/g' package/base-files/files/bin/config_generate
+
+# 合并仓库预置defconfig和自定义config
+if [ -f "defconfig/mt7986-ax7800.config" ]; then
+    echo "检测到仓库预置defconfig，进行合并..."
+    cp defconfig/mt7986-ax7800.config .config.base
+    cat .config >> .config.base
+    mv .config.base .config
+fi
