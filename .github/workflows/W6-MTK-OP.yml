@@ -20,7 +20,7 @@ on:
         default: 'false'
 
 env:
-  REPO_URL: https://github.com/zow2023/immortalwrt-mt798x-rebase
+  REPO_URL: https://github.com/chasey-dev/immortalwrt-mt798x-rebase
   REPO_BRANCH: 25.12
   FEEDS_CONF: W6/feeds.conf.default
   CONFIG_FILE: W6/mtkw6.config
