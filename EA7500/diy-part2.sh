@@ -16,7 +16,7 @@
 # git clone https://github.com/sbwml/luci-app-filemanager package/luci-app-filemanager
 
 #git clone https://github.com/muink/luci-app-tinyfilemanager package/luci-app-tinyfilemanager
-
+rm -rf feeds/luci/applications/luci-app-passwall
 # 移除 openwrt feeds 自带的核心包
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 
