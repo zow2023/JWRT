@@ -36,6 +36,15 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main
 
+    - name: Debug files
+      run: |
+       echo "=== GITHUB_WORKSPACE ==="
+       ls -la $GITHUB_WORKSPACE/
+       echo "=== EA7500 folder ==="
+       ls -la $GITHUB_WORKSPACE/EA7500/
+       echo "=== File exists check ==="
+       test -f $GITHUB_WORKSPACE/$DIY_P1_SH && echo "EXISTS" || echo "NOT FOUND"     
+
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
