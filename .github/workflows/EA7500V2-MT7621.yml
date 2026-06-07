@@ -36,6 +36,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main     
 
+    - name: Debug files
+      run: |
+        echo "=== EA7500 folder content ==="
+        ls -la $GITHUB_WORKSPACE/EA7500/ || echo "FOLDER EMPTY OR NOT EXIST"
+        echo "=== All files recursive ==="
+        find $GITHUB_WORKSPACE/EA7500 -type f || echo "NO FILES FOUND"
+        
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
