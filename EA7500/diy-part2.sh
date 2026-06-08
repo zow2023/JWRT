@@ -30,8 +30,8 @@ git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 
 # git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
 
-#rm -rf feeds/packages/net/smartdns
-#rm -rf feeds/luci/applications/luci-app-smartdns  
+rm -rf feeds/packages/net/smartdns
+rm -rf feeds/luci/applications/luci-app-smartdns  
 git clone https://github.com/pymumu/openwrt-smartdns feeds/packages/net/smartdns
 git clone https://github.com/pymumu/luci-app-smartdns feeds/luci/applications/luci-app-smartdns 
 
