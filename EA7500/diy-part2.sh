@@ -16,9 +16,10 @@
 # git clone https://github.com/sbwml/luci-app-filemanager package/luci-app-filemanager
 
 #git clone https://github.com/muink/luci-app-tinyfilemanager package/luci-app-tinyfilemanager
-rm -rf feeds/luci/applications/luci-app-passwall
+
 # 移除 openwrt feeds 自带的核心包
-rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
+rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
+rm -rf feeds/luci/applications/luci-app-passwall
 
 #git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
 
