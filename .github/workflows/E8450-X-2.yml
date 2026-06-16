@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: W6-MTK-OP-2
+name: E8450-X-OP-2
 
 on:
   repository_dispatch:
@@ -20,12 +20,12 @@ on:
         default: 'false'
 
 env:
-  REPO_URL: https://github.com/zow2023/immortalwrt-mt798x-6.6
-  REPO_BRANCH: openwrt-24.10-6.6
-  FEEDS_CONF: W6/feeds.conf.default
-  CONFIG_FILE: W6/mtkw6-2.config
-  DIY_P1_SH: W6/diy-part1.sh
-  DIY_P2_SH: W6/diy-part2.sh
+  REPO_URL: https://github.com/x-wrt/x-wrt.git
+  REPO_BRANCH: 26.04_b202605010101
+  FEEDS_CONF: E8450/feeds.conf.default
+  CONFIG_FILE: E8450/x.config
+  DIY_P1_SH: E8450/diy-part1.sh
+  DIY_P2_SH: E8450/diy-part3.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
