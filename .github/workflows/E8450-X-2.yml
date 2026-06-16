@@ -24,8 +24,8 @@ env:
   REPO_BRANCH: 26.04_b202605010101
   FEEDS_CONF: E8450/feeds.conf.default
   CONFIG_FILE: E8450/x.config
-  DIY_P1_SH: E8450/diy-part1.sh
-  DIY_P2_SH: E8450/diy-part3.sh
+  DIY_P1_SH: E8450/diy-part-1.sh
+  DIY_P2_SH: E8450/diy-part-3.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
