@@ -20,10 +20,10 @@ on:
         default: 'false'
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: v25.12.0
+  REPO_URL: https://github.com/openwrt/openwrt
+  REPO_BRANCH: v25.12.4
   FEEDS_CONF: E8450/feeds.conf.default
-  CONFIG_FILE: E8450/im25120.config
+  CONFIG_FILE: E8450/25122official.config
   DIY_P1_SH: E8450/diy-part-1.sh
   DIY_P2_SH: E8450/diy-part-2.sh
   UPLOAD_BIN_DIR: false
