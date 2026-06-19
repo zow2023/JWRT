@@ -17,14 +17,14 @@ on:
       branch:
         description: "WRT Branch"
         required: true
-        default: '26.04_b202606182110'
+        default: 'v25.12.0'
 
 env:
-  REPO_URL: https://github.com/x-wrt/x-wrt.git
-  REPO_BRANCH: ${{ github.event.inputs.branch || '26.04_b202606182110' }}
-  CONFIG_FILE: E8450/x.config
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.0' }}
+  CONFIG_FILE: E8450/im25120.config
   DIY_P1_SH: E8450/diy-part-1.sh
-  DIY_P2_SH: E8450/diy-part-3.sh
+  DIY_P2_SH: E8450/diy-part-2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: false
@@ -84,6 +84,12 @@ jobs:
         cd $WORK_DIR
         ./scripts/feeds update -a
 
+    - name: Load custom feeds
+      run: |
+       cd $WORK_DIR
+       chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH"
+       "$GITHUB_WORKSPACE/$DIY_P1_SH"
+
     - name: Install feeds
       run: |
         cd $WORK_DIR
@@ -92,14 +98,14 @@ jobs:
     - name: Load custom configuration
       run: |
         cd $WORK_DIR
-        # 复制 X-WRT 预置的 mt7622 配置文件
-        cp feeds/x/rom/lede/config.mediatek-mt7622 .config
-        
-        # 你的特定设备配置注入逻辑（Linksys E8450）
-        sed -i '/CONFIG_TARGET_DEVICE_/d' .config
-        sed -i '/CONFIG_TARGET_MULTI_PROFILE/d' .config
-        echo "# CONFIG_TARGET_MULTI_PROFILE is not set" >> .config
-        echo "CONFIG_TARGET_DEVICE_mediatek_mt7622_DEVICE_linksys_e8450-ubi=y" >> .config
+        [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && \
+        cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
+
+        [ -d "$GITHUB_WORKSPACE/files" ] && \
+        cp -r "$GITHUB_WORKSPACE/files" .
+
+        chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
+        "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
