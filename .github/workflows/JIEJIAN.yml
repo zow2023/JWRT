@@ -14,13 +14,17 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
-      ssh:
-        description: 'SSH connection to Actions'
-        required: false
-        default: 'false'
+      branch:
+        description: "WRT Branch"
+        required: true
+        default: '26.04_b202606182110'
 
 env:
   REPO_URL: https://github.com/x-wrt/x-wrt.git
+  REPO_BRANCH: ${{ github.event.inputs.branch || '26.04_b202606182110' }}
+  CONFIG_FILE: E8450/x.config
+  DIY_P1_SH: E8450/diy-part-1.sh
+  DIY_P2_SH: E8450/diy-part-3.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: false
@@ -68,11 +72,11 @@ jobs:
         echo "WORK_DIR=/mnt/work/openwrt" >> $GITHUB_ENV
 
     - name: Clone source code
+      env:
+        REPO_BRANCH: ${{ github.event.inputs.branch }}
       run: |
         df -hT
-        # 动态读取你的 release.tag 并克隆 X-WRT 源码到工作区
-        REPO_BRANCH=$(cat release.tag)
-        git clone --depth 1 $REPO_URL -b $REPO_BRANCH $WORK_DIR
+        git clone --depth 1 -b $REPO_BRANCH $REPO_URL $WORK_DIR
         ln -sf $WORK_DIR $GITHUB_WORKSPACE/openwrt
 
     - name: Update feeds
@@ -137,7 +141,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: X-WRT_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: WRT_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
     - name: Organize files
@@ -156,20 +160,20 @@ jobs:
         name: X-WRT_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
-    - name: Generate release tag
-      id: tag
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        touch release.txt
-        echo "status=success" >> $GITHUB_OUTPUT
+    #- name: Generate release tag
+    #  id: tag
+    # if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+    #  run: |
+    #    echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+     #   touch release.txt
+      #  echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload firmware to release
-      uses: softprops/action-gh-release@v2
-      if: steps.tag.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
+   # - name: Upload firmware to release
+   #   uses: softprops/action-gh-release@v2
+   #   if: steps.tag.outputs.status == 'success' && !cancelled()
+   #   env:
+    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #  with:
+     #   tag_name: ${{ steps.tag.outputs.release_tag }}
+      #  body_path: release.txt
+       # files: ${{ env.FIRMWARE }}/*
