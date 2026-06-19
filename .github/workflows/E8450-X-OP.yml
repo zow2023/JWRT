@@ -14,14 +14,14 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
-      ssh:
-        description: 'SSH connection to Actions'
-        required: false
-        default: 'false'
+      branch:
+        description: 'X-WRT Branch'
+        required: true
+        default: '26.04_b202606182110'
 
 env:
   REPO_URL: https://github.com/x-wrt/x-wrt.git
-  REPO_BRANCH: 26.04_b202605010101
+  REPO_BRANCH: ${{ github.event.inputs.branch || '26.04_b202606182110' }}
   FEEDS_CONF: E8450/feeds.conf.default
   CONFIG_FILE: E8450/x.config
   DIY_P1_SH: E8450/diy-part-1.sh
