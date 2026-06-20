@@ -34,10 +34,10 @@ rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
 
-#rm -rf feeds/luci/applications/luci-app-dae
+rm -rf feeds/luci/applications/luci-app-dae
 #rm -rf feeds/luci/applications/luci-app-daed
 rm -rf feeds/luci/applications/luci-app-homeproxy
-#rm -rf feeds/packages/net/{dae,daed}
+rm -rf feeds/packages/net/{dae,daed}
 
 #git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
 #git clone https://github.com/w9315273/luci-app-adguardhome package/luci-app-adguardhome
@@ -53,7 +53,7 @@ git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-time
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
-rm -rf package/helloworld/luci-app-daed
+#rm -rf package/helloworld/luci-app-daed
 rm -rf package/helloworld/dae
 #rm -rf package/helloworld/shadowsocksr-libev
 
