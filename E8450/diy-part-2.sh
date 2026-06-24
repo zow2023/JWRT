@@ -58,7 +58,7 @@ rm -rf package/helloworld/dae
 #rm -rf package/helloworld/shadowsocksr-libev
 
 # git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
-curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+#curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
 #rm -rf feeds/packages/net/smartdns
 #rm -rf feeds/luci/applications/luci-app-smartdns  
