@@ -11,6 +11,7 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
+git clone https://github.com/QiuSimons/luci-app-dae -b kix package/dae
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 
 rm -rf package/helloworld/luci-app-dae
