@@ -10,12 +10,12 @@ rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
 
-#git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
+git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 
-#rm -rf package/helloworld/luci-app-dae
+rm -rf package/helloworld/luci-app-dae
 #rm -rf package/helloworld/luci-app-daed
-#rm -rf package/helloworld/dae
+rm -rf package/helloworld/dae
 
 rm -rf feeds/packages/lang/node
 git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
