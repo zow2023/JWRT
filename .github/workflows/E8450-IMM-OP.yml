@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: E8450-OFFICIAL-IMM-OP
+name: E8450-IMM-OP
 
 on:
   repository_dispatch:
