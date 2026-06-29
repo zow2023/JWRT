@@ -35,7 +35,7 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
 
 rm -rf feeds/luci/applications/luci-app-dae
-#rm -rf feeds/luci/applications/luci-app-daed
+rm -rf feeds/luci/applications/luci-app-daed
 rm -rf feeds/luci/applications/luci-app-homeproxy
 rm -rf feeds/packages/net/{dae,daed}
 
