@@ -11,7 +11,7 @@
 #
 
 #git clone https://github.com/kiddin9/luci-app-dnsfilter package/luic-app-dnsfilter
-#git clone https://github.com/sirpdboy/luci-app-parentcontrol package/luci-app-parentcontrol
+git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
 #git clone https://github.com/4IceG/luci-app-timecontrol package/luci-app-timecontrol
 
 #git clone https://github.com/xiaoxiao29/luci-app-adguardhome package/luci-app-adguardhome
@@ -32,14 +32,14 @@ git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netp
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
-git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
+#git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
 
 rm -rf feeds/luci/applications/luci-app-dae
 rm -rf feeds/luci/applications/luci-app-daed
 rm -rf feeds/luci/applications/luci-app-homeproxy
 rm -rf feeds/packages/net/{dae,daed}
 
-#git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
+git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
 #git clone https://github.com/w9315273/luci-app-adguardhome package/luci-app-adguardhome
 
 git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
@@ -73,8 +73,8 @@ rm -rf package/helloworld/dae
 
 rm -rf feeds/packages/lang/node
 #git clone https://github.com/sbwml/feeds_packages_lang_node-prebuilt -b packages-23.05 feeds/packages/lang/node
-git clone https://github.com/sbwml/feeds_packages_lang_node-prebuilt -b packages-24.10 feeds/packages/lang/node
-#git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
+#git clone https://github.com/sbwml/feeds_packages_lang_node-prebuilt -b packages-24.10 feeds/packages/lang/node
+git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
 
 rm -rf feeds/packages/lang/golang
 git clone https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
