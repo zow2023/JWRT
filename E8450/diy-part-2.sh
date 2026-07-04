@@ -17,8 +17,6 @@ git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-par
 #git clone https://github.com/xiaoxiao29/luci-app-adguardhome package/luci-app-adguardhome
 #git clone https://github.com/TanZhiwen2001/luci-app-adguardhome package/luci-app-adguardhome
 
-# git clone https://github.com/sbwml/luci-app-filemanager package/luci-app-filemanager
-
 ##git clone https://github.com/brvphoenix/luci-app-wrtbwmon package/luci-app-wrtbwmon
 
 git clone https://github.com/gSpotx2f/luci-app-cpu-status package/luci-app-cpu-status
@@ -60,11 +58,10 @@ rm -rf package/helloworld/dae
 # git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
 #curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
-#rm -rf feeds/packages/net/smartdns
-#rm -rf feeds/luci/applications/luci-app-smartdns  
-#git clone https://github.com/zow2023/openwrt-smartdns feeds/packages/net/smartdns
-#git clone https://github.com/pymumu/openwrt-smartdns feeds/packages/net/smartdns
-#git clone https://github.com/pymumu/luci-app-smartdns feeds/luci/applications/luci-app-smartdns 
+rm -rf feeds/packages/net/smartdns
+rm -rf feeds/luci/applications/luci-app-smartdns
+git clone https://github.com/pymumu/openwrt-smartdns feeds/packages/net/smartdns
+git clone https://github.com/pymumu/luci-app-smartdns feeds/luci/applications/luci-app-smartdns 
 
 #git clone https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
 #git clone https://github.com/jerrykuku/luci-app-argon-config.git package/luci-theme-argon-config
