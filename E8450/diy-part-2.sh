@@ -12,10 +12,8 @@
 
 #git clone https://github.com/kiddin9/luci-app-dnsfilter package/luic-app-dnsfilter
 git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
-#git clone https://github.com/4IceG/luci-app-timecontrol package/luci-app-timecontrol
 
 #git clone https://github.com/xiaoxiao29/luci-app-adguardhome package/luci-app-adguardhome
-#git clone https://github.com/TanZhiwen2001/luci-app-adguardhome package/luci-app-adguardhome
 
 ##git clone https://github.com/brvphoenix/luci-app-wrtbwmon package/luci-app-wrtbwmon
 
@@ -45,7 +43,6 @@ git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-time
 #git clone https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
 #git clone https://github.com/QiuSimons/vmlinux-btf package/vmlinux-btf
 
-#git clone https://github.com/zow2023/luci-app-dae package/dae
 #git clone https://github.com/QiuSimons/luci-app-dae -b kix package/dae
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
