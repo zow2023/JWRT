@@ -76,6 +76,9 @@ git clone https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/l
 # Modify default IP
 sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
+# OpenWrt 24.10 精确修改 mac80211.uc 默认开启无线
+sed -i 's/\${defaults ? 0 : 1}/0/g' package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc
+
 # Modify default theme
 #sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
 
