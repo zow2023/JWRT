@@ -13,8 +13,8 @@ env:
   REPO_URL: https://github.com/x-wrt/x-wrt.git
   REPO_BRANCH: ${{ github.event.inputs.branch || '25.04_b202507121539' }}
   CONFIG_FILE: EA7500/x.config
-  DIY_P1_SH: EA7500/diy-part-1.sh
-  DIY_P2_SH: EA7500/diy-part-2.sh
+  DIY_P1_SH: EA7500/diy-part1.sh
+  DIY_P2_SH: EA7500/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: false
