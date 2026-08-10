@@ -38,7 +38,7 @@ jobs:
       run: |
         # 1. 彻底清理系统无用文件，最大化合并前的原生空间
         docker rmi $(docker images -q) || true
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift || true
         
         # 2. 安装 OpenWrt 编译核心依赖、MergerFS 及 ccache 缓存工具
         sudo -E apt-get -qq update
@@ -71,12 +71,11 @@ jobs:
         git clone --depth 1 --single-branch -b $REPO_BRANCH $REPO_URL $WORK_DIR
         ln -sf $WORK_DIR $GITHUB_WORKSPACE/openwrt
 
-    # 【新增】dl 源码包与 ccache 编译缓存，大幅加速二次编译
     - name: 缓存 OpenWrt 下载包 (dl)
       uses: actions/cache@v4
       with:
         path: ${{ env.WORK_DIR }}/dl
-        key: dl-${{ hashFiles('${{ env.WORK_DIR }}/feeds.conf.default') }}
+        key: dl-${{ hashFiles('openwrt/feeds.conf.default') }}
         restore-keys: |
           dl-
 
@@ -88,7 +87,6 @@ jobs:
         restore-keys: |
           ccache-
 
-    # 【修复重点】正确的顺序：1. 执行 DIY-P1 修改 feeds -> 2. update 索引 -> 3. install 安装
     - name: Load custom feeds
       run: |
         cd $WORK_DIR
@@ -110,6 +108,9 @@ jobs:
         cd $WORK_DIR
         [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
         [ -d "$GITHUB_WORKSPACE/files" ] && cp -r "$GITHUB_WORKSPACE/files" .
+
+        # 强制开启 ccache 支持，确保 ccache 缓存能真正发挥加速效果
+        echo "CONFIG_CCACHE=y" >> .config
 
         chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
         "$GITHUB_WORKSPACE/$DIY_P2_SH"
@@ -138,24 +139,13 @@ jobs:
       run: |
         cd $WORK_DIR
         echo -e "$(nproc) thread compile"
-        # 优先多线程全速编译，失败则降级单线程并开启详细日志
-        if make -j$(nproc) V=s; then
-          status="success"
-        else
-          echo "全速编译失败，尝试单线程详细日志模式..."
-          make -j1 V=s || {
-            echo "编译彻底失败，请检查日志！"
-            exit 1
-          }
-          status="success"
-        fi
+        make -j$(nproc) || make -j1 || make -j1 V=s        
+        echo "status=success" >> $GITHUB_OUTPUT
         
-        if [ "$status" = "success" ]; then
-          echo "status=success" >> $GITHUB_OUTPUT
-          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        fi
+        # 提取设备名称（添加 head -n 1 防范多行匹配）
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' | head -n 1 > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
     - name: Upload bin directory
       uses: actions/upload-artifact@v4
