@@ -41,7 +41,7 @@ jobs:
         
         sudo -E apt-get -qq update
         # 仅安装 OpenWrt 编译的核心补丁包与 MergerFS
-        sudo -E apt-get -qq install mergerfs clang llvm flex bison gawk \
+        sudo -E apt-get -qq install ccache mergerfs clang llvm flex bison gawk \
             gettext libncurses-dev libz-dev libssl-dev dos2unix dwarves quilt npm jq \
             python3-setuptools python3-pyelftools python3-dev rsync swig zlib1g-dev \
             xsltproc zstd asciidoc patch subversion uglifyjs p7zip-full msmtp texinfo \
@@ -53,32 +53,43 @@ jobs:
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
 
-    - name: 🛠️ 部署 MergerFS 空间合并
+    - name: 设置工作目录
       run: |
-        sudo rm -rf /mnt/work /mnt/work_dir /data_dir
-        sudo mkdir -p /data_dir /mnt/work_dir /mnt/work
-        sudo chmod 777 /mnt/work /mnt/work_dir /data_dir
-        sudo mergerfs -o defaults,allow_other,use_ino,category.create=mfs /mnt/work_dir:/data_dir /mnt/work
+        WORK_DIR="$GITHUB_WORKSPACE/openwrt"
+        mkdir -p "$WORK_DIR"
+        echo "WORK_DIR=$WORK_DIR" >> $GITHUB_ENV
         
-        sudo mkdir -p /mnt/work/openwrt
-        sudo chown $USER:$GROUPS /mnt/work/openwrt
-        echo "WORK_DIR=/mnt/work/openwrt" >> $GITHUB_ENV
 
     - name: Clone source code
       run: |
         git clone --depth 1 --single-branch -b $REPO_BRANCH $REPO_URL $WORK_DIR
         ln -sf $WORK_DIR $GITHUB_WORKSPACE/openwrt
 
-    - name: Update feeds
-      run: |
-        cd $WORK_DIR
-        ./scripts/feeds update -a
+    - name: Cache OpenWrt downloads
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.WORK_DIR }}/dl
+        key: dl-${{ hashFiles('${{ env.WORK_DIR }}/feeds.conf.default') }}
+        restore-keys: dl-
 
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.WORK_DIR }}/.ccache
+        key: ccache-${{ github.sha }}
+        restore-keys: ccache-   
+
+        
     - name: Load custom feeds
       run: |
         cd $WORK_DIR
         chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH"
         "$GITHUB_WORKSPACE/$DIY_P1_SH"
+
+    - name: Update feeds
+      run: |
+        cd $WORK_DIR
+        ./scripts/feeds update -a
 
     - name: Install feeds
       run: |
@@ -126,7 +137,6 @@ jobs:
       with:
         name: WRT_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
-        retention-days: 7
 
     - name: Organize files
       id: organize
@@ -140,6 +150,5 @@ jobs:
       uses: actions/upload-artifact@v4
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       with:
-        name: X-WRT_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
-        retention-days: 14
