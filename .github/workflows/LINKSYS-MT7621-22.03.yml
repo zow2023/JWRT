@@ -16,8 +16,8 @@ on:
 #    - cron: 0 8 * * 5
 
 env:
-  REPO_URL: https://github.com/redfrog999/openwrt.git
-  REPO_BRANCH: openwrt-22.03
+  REPO_URL: https://github.com/zow2023/PCODE/.git
+  REPO_BRANCH: openwrt-22.03h
   DEVICE_NAME: EA7500v2
   #FILES: ramips-hnat/files
   FEEDS_CONF: EA7500/feeds.conf.default
