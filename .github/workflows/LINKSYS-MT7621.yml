@@ -1,4 +1,4 @@
-name: LINKSYS-MT7621 WRT
+name: LINKSYS-MT7621 WRT (MergerFS 优化版)
 
 on:
   repository_dispatch:
@@ -26,60 +26,69 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 360   # 增加 6 小时超时保护，防止卡死浪费额度
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4 
+      uses: actions/checkout@v4
 
-    - name: 🚀 精简版环境优化与依赖安装
+    - name: 🚀 深度清理系统环境 & 安装编译依赖
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 移除无用镜像与工具链缓存
+        # 1. 彻底清理系统无用文件，最大化合并前的原生空间
         docker rmi $(docker images -q) || true
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
         
+        # 2. 安装 OpenWrt 编译核心依赖、MergerFS 及 ccache 缓存工具
         sudo -E apt-get -qq update
-        # 仅安装 OpenWrt 编译的核心补丁包与 MergerFS
-        sudo -E apt-get -qq install ccache mergerfs clang llvm flex bison gawk \
+        sudo -E apt-get -qq install mergerfs clang llvm flex bison gawk \
             gettext libncurses-dev libz-dev libssl-dev dos2unix dwarves quilt npm jq \
             python3-setuptools python3-pyelftools python3-dev rsync swig zlib1g-dev \
             xsltproc zstd asciidoc patch subversion uglifyjs p7zip-full msmtp texinfo \
             libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool \
-            autopoint device-tree-compiler tzdata
-        
+            autopoint device-tree-compiler tzdata ccache
+
         sudo npm install -g pnpm
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
 
-    - name: 设置工作目录
+    - name: 🛠️ 部署 MergerFS 空间合并 (扩展至 100GB+)
       run: |
-        WORK_DIR="$GITHUB_WORKSPACE/openwrt"
-        mkdir -p "$WORK_DIR"
-        echo "WORK_DIR=$WORK_DIR" >> $GITHUB_ENV
+        sudo rm -rf /mnt/work /mnt/work_dir /data_dir
+        sudo mkdir -p /data_dir /mnt/work_dir /mnt/work
+        sudo chmod 777 /mnt/work /mnt/work_dir /data_dir
+        # 将 /mnt (较大分区) 与 / (主分区) 挂载点合并
+        sudo mergerfs -o defaults,allow_other,use_ino,category.create=mfs /mnt/work_dir:/data_dir /mnt/work
         
+        sudo mkdir -p /mnt/work/openwrt
+        sudo chown -R $USER:$GROUPS /mnt/work/openwrt
+        echo "WORK_DIR=/mnt/work/openwrt" >> $GITHUB_ENV
 
     - name: Clone source code
       run: |
         git clone --depth 1 --single-branch -b $REPO_BRANCH $REPO_URL $WORK_DIR
         ln -sf $WORK_DIR $GITHUB_WORKSPACE/openwrt
 
-    - name: Cache OpenWrt downloads
+    # 【新增】dl 源码包与 ccache 编译缓存，大幅加速二次编译
+    - name: 缓存 OpenWrt 下载包 (dl)
       uses: actions/cache@v4
       with:
         path: ${{ env.WORK_DIR }}/dl
         key: dl-${{ hashFiles('${{ env.WORK_DIR }}/feeds.conf.default') }}
-        restore-keys: dl-
+        restore-keys: |
+          dl-
 
-    - name: Cache ccache
+    - name: 缓存 ccache 中间文件
       uses: actions/cache@v4
       with:
         path: ${{ env.WORK_DIR }}/.ccache
         key: ccache-${{ github.sha }}
-        restore-keys: ccache-   
+        restore-keys: |
+          ccache-
 
-        
+    # 【修复重点】正确的顺序：1. 执行 DIY-P1 修改 feeds -> 2. update 索引 -> 3. install 安装
     - name: Load custom feeds
       run: |
         cd $WORK_DIR
@@ -112,12 +121,16 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: Download package
+    - name: Download package (支持3次重试与无效包清理)
       id: package
       run: |
         cd $WORK_DIR
         make defconfig
-        make download -j$(nproc)
+        # 3 次重试机制，防止网络波动导致中断
+        for i in {1..3}; do
+          make download -j$(nproc) && break || sleep 10
+        done
+        # 清理小于 1KB 的错误下载包
         find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile the firmware
@@ -125,30 +138,62 @@ jobs:
       run: |
         cd $WORK_DIR
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        # 优先多线程全速编译，失败则降级单线程并开启详细日志
+        if make -j$(nproc) V=s; then
+          status="success"
+        else
+          echo "全速编译失败，尝试单线程详细日志模式..."
+          make -j1 V=s || {
+            echo "编译彻底失败，请检查日志！"
+            exit 1
+          }
+          status="success"
+        fi
         
-        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+        if [ "$status" = "success" ]; then
+          echo "status=success" >> $GITHUB_OUTPUT
+          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+        fi
 
     - name: Upload bin directory
       uses: actions/upload-artifact@v4
       if: env.UPLOAD_BIN_DIR == 'true'
       with:
         name: WRT_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: openwrt/bin
+        path: ${{ env.WORK_DIR }}/bin
 
-    - name: Organize files
+    - name: Organize files (整理固件并校验)
       id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
       run: |
         cd $WORK_DIR/bin/targets/*/*
         rm -rf packages
+        
+        # 校验是否有成功生成的固件
+        if [ -z "$(ls *.bin 2>/dev/null || ls *.img 2>/dev/null)" ]; then
+          echo "错误：编译完成但未在目标目录找到 .bin/.img 固件文件！"
+          exit 1
+        fi
+        
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
+        retention-days: 14
+        if-no-files-found: error
+
+    - name: 保存构建日志（供排错使用）
+      if: always()   # 无论成功还是失败，均上传编译日志
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log-${{ github.run_id }}
+        path: ${{ env.WORK_DIR }}/logs
+        retention-days: 7
+        if-no-files-found: ignore
