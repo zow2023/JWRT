@@ -47,7 +47,7 @@ jobs:
             python3-setuptools python3-pyelftools python3-dev rsync swig zlib1g-dev \
             xsltproc zstd asciidoc patch subversion uglifyjs p7zip-full msmtp texinfo \
             libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool \
-            autopoint device-tree-compiler tzdata ccache
+            autopoint device-tree-compiler tzdata
 
         sudo npm install -g pnpm
         sudo -E apt-get -qq autoremove --purge
@@ -70,22 +70,6 @@ jobs:
       run: |
         git clone --depth 1 --single-branch -b $REPO_BRANCH $REPO_URL $WORK_DIR
         ln -sf $WORK_DIR $GITHUB_WORKSPACE/openwrt
-
-    - name: 缓存 OpenWrt 下载包 (dl)
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.WORK_DIR }}/dl
-        key: dl-${{ hashFiles('openwrt/feeds.conf.default') }}
-        restore-keys: |
-          dl-
-
-    - name: 缓存 ccache 中间文件
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.WORK_DIR }}/.ccache
-        key: ccache-${{ github.sha }}
-        restore-keys: |
-          ccache-
 
     - name: Load custom feeds
       run: |
