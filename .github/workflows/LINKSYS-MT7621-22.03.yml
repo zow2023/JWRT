@@ -18,7 +18,7 @@ on:
 env:
   REPO_URL: https://github.com/zow2023/PCODE
   REPO_BRANCH: openwrt-22.03
-  #FILES: ramips-hnat/files
+  FILES: EA7500/files
   FEEDS_CONF: EA7500/feeds.conf.default
   CONFIG_FILE: EA7500/h.config
   DIY_P1_SH: EA7500/diy-part1-1.sh
