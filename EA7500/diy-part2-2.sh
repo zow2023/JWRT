@@ -11,7 +11,7 @@
 #
 
 # Modify default IP 
-sed -i 's/192.168.1.1/10.0.10.1/g' package/base-files/files/bin/config_generate
+sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
 # 修正 MIPS 下 Sing-Box 的编译环境变量
 # 强制让编译工具链使用更稳定的指令集对齐
