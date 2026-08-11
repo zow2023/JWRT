@@ -10,7 +10,8 @@
 # Description: OpenWrt DIY script part 2 (After Update feeds)
 #
 
-#git clone  https://github.com/zow2023/openwrt_helloworld package/helloworld
+rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
+git clone  https://github.com/zow2023/openwrt_helloworld package/helloworld
 
 # Modify default IP 
 sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
