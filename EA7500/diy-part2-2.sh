@@ -20,6 +20,12 @@ sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 # 强制让编译工具链使用更稳定的指令集对齐
 #!/bin/bash
 
+# 在 diy-part2.sh 中追加以下内容
+if [ -f package/helloworld/sing-box/Makefile ]; then
+    sed -i 's/CGO_ENABLED=1/CGO_ENABLED=0/g' package/helloworld/sing-box/Makefile
+    sed -i '/GO_PKG_BUILD_VARS/s/$/ CGO_ENABLED=0/' package/helloworld/sing-box/Makefile
+fi
+
 # -----------------強制給予 uci-defaults 腳本執行權限，防止雲端編譯權限丟失-------------------------
 chmod +x files/etc/uci-defaults/99-physical-sovereignty
 
@@ -29,7 +35,6 @@ rm -rf feeds/packages/lang/golang
 git clone -b 26.x --single-branch https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 echo '=========Replace golang OK!========='
 
-#------------------致敬老兵，让MT7621在ShellClash的加持下重新焕发战斗神采---------------------
 
 # 1. 强制重写全局编译参数，针对 MT7621 (MIPS 1004Kc/74kc) 深度优化
 sed -i 's/-O2/-O3 -march=mipsel -mtune=74kc -mdsp -mno-mips16 -fno-caller-saves/g' include/target.mk
