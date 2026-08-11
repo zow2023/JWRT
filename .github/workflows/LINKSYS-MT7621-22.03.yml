@@ -2,7 +2,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: OpenWrt LINKSYS-MT7621
+name: OpenWrt LINKSYS-MT7621-22.03
 
 on:
   repository_dispatch:
