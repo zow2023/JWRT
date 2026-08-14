@@ -1,4 +1,4 @@
-name: LINKSYS-MT7621 WRT (MergerFS 优化版)
+name: LINKSYS-MT7621 WRT (MergerFS)
 
 on:
   repository_dispatch:
