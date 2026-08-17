@@ -55,15 +55,15 @@ rm -rf package/helloworld/dae
 # git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
 #curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
-rm -rf feeds/packages/net/smartdns
-rm -rf feeds/luci/applications/luci-app-smartdns
-git clone https://github.com/pymumu/openwrt-smartdns feeds/packages/net/smartdns
-git clone https://github.com/pymumu/luci-app-smartdns feeds/luci/applications/luci-app-smartdns 
+#rm -rf feeds/packages/net/smartdns
+#rm -rf feeds/luci/applications/luci-app-smartdns
+#git clone https://github.com/pymumu/openwrt-smartdns feeds/packages/net/smartdns
+#git clone https://github.com/pymumu/luci-app-smartdns feeds/luci/applications/luci-app-smartdns 
 
 #git clone https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
 #git clone https://github.com/jerrykuku/luci-app-argon-config.git package/luci-theme-argon-config
-#git clone https://github.com/muink/openwrt-einat-ebpf.git package/einat-ebpf
-#git clone https://github.com/muink/luci-app-einat.git package/luci-app-einat
+git clone https://github.com/muink/openwrt-einat-ebpf.git package/einat-ebpf
+git clone https://github.com/muink/luci-app-einat.git package/luci-app-einat
 
 rm -rf feeds/packages/lang/node
 #git clone https://github.com/sbwml/feeds_packages_lang_node-prebuilt -b packages-23.05 feeds/packages/lang/node
