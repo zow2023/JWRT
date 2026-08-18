@@ -16,16 +16,23 @@ git clone https://github.com/gSpotx2f/luci-app-interfaces-statistics package/luc
 git clone https://github.com/gSpotx2f/luci-app-temp-status package/luci-app-temp-status
 git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netports
 
+git clone https://github.com/muink/openwrt-einat-ebpf.git package/einat-ebpf
+git clone https://github.com/muink/luci-app-einat.git package/luci-app-einat
+
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
+#git clone https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
+
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
-
 #git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
 git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
+
 git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
-curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+#curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
+git clone https://github.com/QiuSimons/luci-app-honk package/honk
+
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/dae
 
