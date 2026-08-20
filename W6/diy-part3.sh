@@ -31,7 +31,7 @@ git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-time
 #curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
-git clone https://github.com/QiuSimons/luci-app-honk package/honk
+git clone https://github.com/zow2023/luci-app-honk package/honk
 
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/dae
