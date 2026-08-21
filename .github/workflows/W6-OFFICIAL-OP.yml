@@ -116,13 +116,15 @@ jobs:
           cd /mnt/work/openwrt
           "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
-      - name: Optimize Rust build
+      - name: Fix Rust build with System LLVM
         run: |
           cd /mnt/work/openwrt
-          # 如果 feeds 中有 rust，配置优先使用宿主机的 rust/cargo 或跳过重度 LLVM 编译
-          if [ -d "feeds/packages/lang/rust" ]; then
-            # 恢复或修正 Makefile，避免编译 LLVM 源码
-            sed -i 's/--set=llvm.download-ci-llvm=false/--set=llvm.download-ci-llvm=true/' feeds/packages/lang/rust/Makefile || true
+          RUST_MAKEFILE="feeds/packages/lang/rust/Makefile"
+          if [ -f "$RUST_MAKEFILE" ]; then
+            echo "===== 正在配置 Rust 借用系统 LLVM ====="
+            # 禁用 CI 远程下载 (防 404)，并指定使用系统 llvm-config (防 3 小时全量编译)
+            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false --set=llvm.config=\/usr\/bin\/llvm-config/' "$RUST_MAKEFILE" || true
+            sed -i 's/--set=llvm.download-ci-llvm=false/--set=llvm.download-ci-llvm=false --set=llvm.config=\/usr\/bin\/llvm-config/' "$RUST_MAKEFILE" || true
           fi
 
       - name: Fix libnftnl autotools version mismatch
