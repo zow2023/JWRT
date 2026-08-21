@@ -71,7 +71,7 @@ jobs:
             libglib2.0-dev libncurses5-dev libssl-dev libtool libz-dev \
             libc6-dev-i386 llvm msmtp npm p7zip p7zip-full patch python3-dev \
             python3-pyelftools qemu-utils subversion texinfo tzdata uglifyjs \
-            unzip upx xmlto zlib1g-dev mergerfs ccache
+            unzip upx xmlto zlib1g-dev mergerfs ccache ninja-build
           sudo npm install -g pnpm
           sudo -E apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
@@ -116,15 +116,13 @@ jobs:
           cd /mnt/work/openwrt
           "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
-      - name: Fix Rust build with System LLVM
+      - name: Fix Rust build
         run: |
           cd /mnt/work/openwrt
           RUST_MAKEFILE="feeds/packages/lang/rust/Makefile"
           if [ -f "$RUST_MAKEFILE" ]; then
-            echo "===== 正在配置 Rust 借用系统 LLVM ====="
-            # 禁用 CI 远程下载 (防 404)，并指定使用系统 llvm-config (防 3 小时全量编译)
-            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false --set=llvm.config=\/usr\/bin\/llvm-config/' "$RUST_MAKEFILE" || true
-            sed -i 's/--set=llvm.download-ci-llvm=false/--set=llvm.download-ci-llvm=false --set=llvm.config=\/usr\/bin\/llvm-config/' "$RUST_MAKEFILE" || true
+            echo "===== 禁用 Rust 远程 CI LLVM 下载 (防 404 报错) ====="
+            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' "$RUST_MAKEFILE" || true
           fi
 
       - name: Fix libnftnl autotools version mismatch
