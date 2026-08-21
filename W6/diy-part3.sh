@@ -53,3 +53,6 @@ sed -i 's/\${defaults ? 0 : 1}/0/g' package/network/config/wifi-scripts/files/li
 
 # Modify hostname
 sed -i 's/OpenWrt/W6-WRT/g' package/base-files/files/bin/config_generate
+
+echo "CONFIG_DEVEL=y" >> .config
+echo "CONFIG_CCACHE=y" >> .config
