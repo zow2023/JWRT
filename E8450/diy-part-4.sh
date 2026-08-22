@@ -1,3 +1,4 @@
+#!/bin/bash
 # 移除 openwrt feeds 自带的核心包
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 rm -rf feeds/packages/net/adguardhome
@@ -33,3 +34,6 @@ sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
 # Modify hostname
 sed -i 's/OpenWrt/E8450/g' package/base-files/files/bin/config_generate
+
+echo "CONFIG_DEVEL=y" >> .config
+echo "CONFIG_CCACHE=y" >> .config
