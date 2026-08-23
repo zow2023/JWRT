@@ -74,7 +74,7 @@ jobs:
         ccache: true
         toolchain: true
         skip: true
-        prefix: /workir/openwrt
+        prefix: /workdir/openwrt
         mixkey: w6-mtkw6
           
     - name: Load custom feeds
