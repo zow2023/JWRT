@@ -19,7 +19,13 @@ git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-
 git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
 git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netports
 
+rm -rf feeds/luci/applications/luci-app-dae
+rm -rf feeds/luci/applications/luci-app-daed
+rm -rf feeds/luci/applications/luci-app-homeproxy
+rm -rf feeds/packages/net/{dae,daed}
+
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
+git clone https://github.com/zow2023/luci-app-honk package/honk
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/dae
 
@@ -45,3 +51,5 @@ if [ -f "defconfig/mt7986-ax7800.config" ]; then
     cat .config >> .config.base
     mv .config.base .config
 fi
+echo "CONFIG_DEVEL=y" >> .config
+echo "CONFIG_CCACHE=y" >> .config
