@@ -16,8 +16,8 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
 #git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
 
-git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
-git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netports
+#git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
+#git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netports
 
 rm -rf feeds/luci/applications/luci-app-dae
 rm -rf feeds/luci/applications/luci-app-daed
