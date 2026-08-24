@@ -11,10 +11,10 @@
 #
 
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
-rm -rf feeds/packages/net/adguardhome
+#rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
-git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
-#git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
+#git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
+git clone https://https://github.com/zow2023/luci-app-adguardhome package/luci-app-adguardhome
 
 git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
 git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
