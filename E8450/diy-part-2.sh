@@ -12,8 +12,7 @@
 
 #git clone https://github.com/kiddin9/luci-app-dnsfilter package/luic-app-dnsfilter
 git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
-
-#git clone https://github.com/xiaoxiao29/luci-app-adguardhome package/luci-app-adguardhome
+git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
 
 ##git clone https://github.com/brvphoenix/luci-app-wrtbwmon package/luci-app-wrtbwmon
 
@@ -26,19 +25,16 @@ git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netp
 
 # 移除 openwrt feeds 自带的核心包
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
+
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
-git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
+#git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
+git clone https://github.com/zow2023/luci-app-adguardhome package/luci-app-adguardhome
 
 rm -rf feeds/luci/applications/luci-app-dae
 rm -rf feeds/luci/applications/luci-app-daed
 rm -rf feeds/luci/applications/luci-app-homeproxy
 rm -rf feeds/packages/net/{dae,daed}
-
-#git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
-#git clone https://github.com/w9315273/luci-app-adguardhome package/luci-app-adguardhome
-
-git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
 
 #git clone https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
 #git clone https://github.com/QiuSimons/vmlinux-btf package/vmlinux-btf
@@ -50,7 +46,6 @@ git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
 #rm -rf package/helloworld/luci-app-daed
 rm -rf package/helloworld/dae
-#rm -rf package/helloworld/shadowsocksr-libev
 
 # git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
 #curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
@@ -84,3 +79,6 @@ sed -i 's/\${defaults ? 0 : 1}/0/g' package/network/config/wifi-scripts/files/li
 
 # Modify hostname
 sed -i 's/OpenWrt/E8450/g' package/base-files/files/bin/config_generate
+
+echo "CONFIG_DEVEL=y" >> .config
+echo "CONFIG_CCACHE=y" >> .config
