@@ -3,8 +3,8 @@
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
-git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
-#git clone https://github.com/OneNAS-space/luci-app-adguardhome package/luci-app-adguardhome
+#git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
+git clone https://github.com/zow2023/luci-app-adguardhome package/luci-app-adguardhome
 #git clone https://github.com/w9315273/luci-app-adguardhome package/luci-app-adguardhome
 
 rm -rf feeds/luci/applications/luci-app-dae
@@ -12,7 +12,8 @@ rm -rf feeds/luci/applications/luci-app-daed
 rm -rf feeds/luci/applications/luci-app-homeproxy
 rm -rf feeds/packages/net/{dae,daed}
 
-git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
+#git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
+git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
