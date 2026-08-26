@@ -152,14 +152,18 @@ jobs:
       - name: Patch Kernel Config
         run: |
           cd openwrt
-          chmod +x ./scripts/config
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
-            ./scripts/config --file "$cfg" \
-              -e CONFIG_NET_SCH_BPF \
-              -e CONFIG_BPF_SYSCALL \
-              -e CONFIG_BPF_JIT \
-              -e CONFIG_NETKIT \
-              -e CONFIG_NF_CONNTRACK_CHAIN_EVENTS
+            echo "Checking $cfg"
+            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
+            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
+            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
+            echo "CONFIG_BPF_JIT=y" >> "$cfg"
+            sed -i '/CONFIG_NETKIT/d' "$cfg"
+            echo "CONFIG_NETKIT=y" >> "$cfg"
+            sed -i '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
+            echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
           done
 
       - name: Download package
@@ -178,8 +182,9 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: ${{ runner.os }}-go-
+          key: ${{ runner.os }}-go-${{ hashFiles('E8450/25125official.config', 'E8450/feeds.conf.default') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
          
       - name: Compile the firmware
         id: compile
