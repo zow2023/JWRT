@@ -152,23 +152,14 @@ jobs:
       - name: Patch Kernel Config
         run: |
           cd openwrt
+          chmod +x ./scripts/config
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
-            echo "Checking $cfg"
-
-            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
-            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
-
-            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
-            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
-
-            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
-            echo "CONFIG_BPF_JIT=y" >> "$cfg"
-
-            sed -i '/CONFIG_NETKIT/d' "$cfg"
-            echo "CONFIG_NETKIT=y" >> "$cfg"
-
-            sed -i '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
-            echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
+            ./scripts/config --file "$cfg" \
+              -e CONFIG_NET_SCH_BPF \
+              -e CONFIG_BPF_SYSCALL \
+              -e CONFIG_BPF_JIT \
+              -e CONFIG_NETKIT \
+              -e CONFIG_NF_CONNTRACK_CHAIN_EVENTS
           done
 
       - name: Download package
@@ -180,6 +171,16 @@ jobs:
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
+      
+      - name: Cache Go Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+         
       - name: Compile the firmware
         id: compile
         run: |
