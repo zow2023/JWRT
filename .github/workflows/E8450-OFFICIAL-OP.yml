@@ -125,14 +125,14 @@ jobs:
       - name: Install feeds
         run: cd openwrt && ./scripts/feeds install -a
 
-      #- name: Fix Rust build
-      #  run: |
-       #   cd openwrt
-       #   RUST_MAKEFILE="feeds/packages/lang/rust/Makefile"
-        #  if [ -f "$RUST_MAKEFILE" ]; then
-        #    echo "===== 禁用 Rust 远程 CI LLVM 下载 (防 404 报错) ====="
-        #    sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' "$RUST_MAKEFILE" || true
-         # fi
+      - name: Fix Rust build
+        run: |
+          cd openwrt
+          RUST_MAKEFILE="feeds/packages/lang/rust/Makefile"
+          if [ -f "$RUST_MAKEFILE" ]; then
+            echo "===== 禁用 Rust 远程 CI LLVM 下载 (防 404 报错) ====="
+            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' "$RUST_MAKEFILE" || true
+          fi
 
       - name: Load custom configuration
         run: |
