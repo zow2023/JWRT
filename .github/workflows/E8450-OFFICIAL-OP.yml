@@ -174,17 +174,6 @@ jobs:
           make download -j"$(nproc)"
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
-
-      
-      - name: Cache Go Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('E8450/25125official.config', 'E8450/feeds.conf.default') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
          
       - name: Compile the firmware
         id: compile
