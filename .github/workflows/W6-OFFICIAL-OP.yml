@@ -134,7 +134,7 @@ jobs:
 
       - name: Patch Kernel Config
         run: |
-          cd openwrt
+          cd /mnt/work/openwrt
           chmod +x ./scripts/config
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
             ./scripts/config --file "$cfg" \
