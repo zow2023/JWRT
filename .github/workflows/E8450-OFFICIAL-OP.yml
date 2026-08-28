@@ -110,7 +110,7 @@ jobs:
           toolchain: true
           skip: true
           prefix: /workdir/openwrt
-          mixkey: E8450-25125official          
+          mixkey: E8450-25125official-rust-ci         
 
       - name: Load custom feeds
         run: |
@@ -125,14 +125,12 @@ jobs:
       - name: Install feeds
         run: cd openwrt && ./scripts/feeds install -a
 
-      - name: Fix Rust build
+      - name: Replace Rust feed with guaranteed CI LLVM
         run: |
-          cd openwrt
-          RUST_MAKEFILE="feeds/packages/lang/rust/Makefile"
-          if [ -f "$RUST_MAKEFILE" ]; then
-            echo "===== 禁用 Rust 远程 CI LLVM 下载 (防 404 报错) ====="
-            sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' "$RUST_MAKEFILE" || true
-          fi
+          cd /mnt/work/openwrt
+          rm -rf feeds/packages/lang/rust
+          git clone --depth 1 https://github.com/sbwml/packages_lang_rust.git feeds/packages/lang/rust
+          ./scripts/feeds install -f rust  
 
       - name: Load custom configuration
         run: |
