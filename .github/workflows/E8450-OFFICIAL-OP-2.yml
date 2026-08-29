@@ -197,7 +197,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh cache delete "${{ env.MIXKEY }}" --confirm || true
+          gh cache list --limit 100 --format json | jq -r '.[].key' | grep "${{ env.MIXKEY }}" | xargs -I {} gh cache delete "{}" --confirm || true
 
       # 16. 清理旧 Workflow 运行记录
       - name: Cleanup workflow runs
