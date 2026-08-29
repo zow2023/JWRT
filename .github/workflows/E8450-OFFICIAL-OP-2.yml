@@ -190,15 +190,6 @@ jobs:
             openwrt/logs/
             openwrt/.config
 
-      # 15. 【关键防爆仓机制】在写入新缓存前，主动删除同名旧缓存
-      - name: Delete old cache to prevent 10GB limit blowup
-        if: always()
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh cache list --limit 100 --format json | jq -r '.[].key' | grep "${{ env.MIXKEY }}" | xargs -I {} gh cache delete "{}" --confirm || true
-
       # 16. 清理旧 Workflow 运行记录
       - name: Cleanup workflow runs
         uses: GitRML/delete-workflow-runs@main
