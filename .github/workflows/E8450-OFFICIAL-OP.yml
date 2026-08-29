@@ -127,7 +127,7 @@ jobs:
 
       - name: Replace Rust feed with guaranteed CI LLVM
         run: |
-          cd /mnt/work/openwrt
+          /workdir/openwrt
           rm -rf feeds/packages/lang/rust
           git clone --depth 1 https://github.com/sbwml/packages_lang_rust.git feeds/packages/lang/rust
           ./scripts/feeds install -f rust  
