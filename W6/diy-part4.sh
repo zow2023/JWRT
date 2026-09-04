@@ -16,7 +16,8 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 #git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
 git clone https://github.com/zow2023/luci-app-adguardhome package/luci-app-adguardhome
 
-git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
+#git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
+git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
 git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
 
 #git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
