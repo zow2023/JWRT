@@ -26,7 +26,6 @@ env:
   UPLOAD_RELEASE: false
   TZ: Asia/Shanghai
   DEBIAN_FRONTEND: noninteractive
-  MIXKEY: openwrt-e8450-v25.12
 
 jobs:
   build:
@@ -75,7 +74,7 @@ jobs:
           toolchain: true
           skip: true
           prefix: /workdir/openwrt
-          mixkey: ${{ env.MIXKEY }}
+          mixkey: openwrt-e8450-v25.12
 
       # 5. 加载 E8450 自定义 Feeds
       - name: Load custom feeds
