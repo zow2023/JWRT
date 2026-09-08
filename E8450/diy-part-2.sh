@@ -11,8 +11,10 @@
 #
 
 #git clone https://github.com/kiddin9/luci-app-dnsfilter package/luic-app-dnsfilter
-git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
+#git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
+
 git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
+git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
 
 ##git clone https://github.com/brvphoenix/luci-app-wrtbwmon package/luci-app-wrtbwmon
 
