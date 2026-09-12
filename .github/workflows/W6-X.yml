@@ -131,40 +131,18 @@ jobs:
       - name: Patch Kernel Config
         run: |
           cd openwrt
-          ALL_CFG=$(find target/linux/generic target/linux/mediatek -name "config-6*" | sort)
-          echo "=== 待处理片段 ==="
-          echo "$ALL_CFG"
-
-          # 1) 打印修改前状态（Actions 日志可核对）
-          for cfg in $ALL_CFG; do
-            echo "--- BEFORE $cfg ---"
-            grep -nE 'CONFIG_(NET_SCH_BPF|BPF_SYSCALL|BPF_JIT|NETKIT|NF_CONNTRACK_CHAIN_EVENTS|CGROUPS|SOCK_CGROUP_DATA|CGROUP_BPF)\b' "$cfg" || echo "(无相关行)"
-          done
-
-          # 2) 从 generic 和 target 片段中删除相关行
-          #    （含 "# CONFIG_CGROUP_BPF is not set"——这是上次失败的元凶）
-          for cfg in $ALL_CFG; do
-            sed -i -E '/CONFIG_(NET_SCH_BPF|BPF_SYSCALL|BPF_JIT|NETKIT|NF_CONNTRACK_CHAIN_EVENTS|CGROUPS|SOCK_CGROUP_DATA|CGROUP_BPF)\b/d' "$cfg"
-          done
-
-          # 3) 向 target 片段追加 =y
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
-            cat >> "$cfg" <<'EOF'
-          CONFIG_NET_SCH_BPF=y
-          CONFIG_BPF_SYSCALL=y
-          CONFIG_BPF_JIT=y
-          CONFIG_NETKIT=y
-          CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y
-          CONFIG_CGROUPS=y
-          CONFIG_SOCK_CGROUP_DATA=y
-          CONFIG_CGROUP_BPF=y
-          EOF
-          done
-
-          # 4) 打印修改后状态
-          for cfg in $ALL_CFG; do
-            echo "--- AFTER $cfg ---"
-            grep -nE 'CONFIG_(CGROUPS|SOCK_CGROUP_DATA|CGROUP_BPF)\b' "$cfg" || echo "(无相关行)"
+            echo "Checking $cfg"
+            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
+            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
+            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
+            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
+            echo "CONFIG_BPF_JIT=y" >> "$cfg"
+            sed -i '/CONFIG_NETKIT/d' "$cfg"
+            echo "CONFIG_NETKIT=y" >> "$cfg"
+            sed -i '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
+            echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
           done
 
 
