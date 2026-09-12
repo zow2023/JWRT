@@ -146,6 +146,15 @@ jobs:
             sed -i '/CONFIG_NETKIT/d' "$cfg"
             echo "CONFIG_NETKIT=y" >> "$cfg"
 
+            sed -i '/CONFIG_CGROUPS/d' "$cfg"
+            echo "CONFIG_CGROUPS=y" >> "$cfg"
+
+            sed -i '/CONFIG_SOCK_CGROUP_DATA/d' "$cfg"
+            echo "CONFIG_SOCK_CGROUP_DATA=y" >> "$cfg"
+
+            sed -i '/CONFIG_CGROUP_BPF/d' "$cfg"
+            echo "CONFIG_CGROUP_BPF=y" >> "$cfg"
+
             sed -i '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
             echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
           done
