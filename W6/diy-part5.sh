@@ -14,8 +14,10 @@ rm -rf package/luci-app-adguardhome/patches
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/luci-app-honk package/honk
+git clone https://github.com/meow-rs/meow-rs package/meow-rs
+
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
-rm -rf package/helloworld/dae
+rm -rf package/helloworld/luci-app-dae
 
 rm -rf feeds/packages/lang/node
 git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
