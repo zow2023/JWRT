@@ -14,6 +14,7 @@ rm -rf feeds/packages/net/{dae,daed}
 
 #git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
 git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
+git clone https://github.com/zow2023/luci-app-meow package/meow
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
