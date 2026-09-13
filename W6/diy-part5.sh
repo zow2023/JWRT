@@ -1,10 +1,20 @@
 #!/bin/bash
 #
+
+FILE="target/linux/mediatek/filogic/base-files/etc/hotplug.d/ieee80211/11_fix_wifi_mac"
+if [ -f "$FILE" ]; then
+    sed -i 's/mmc_get_mac_ascii u-boot-env 2gMAC/mmc_get_mac_ascii u-boot-env U2gMAC/' "$FILE"
+    echo ">>> Predator W6: fixed 2.4G MAC variable 2gMAC -> U2gMAC"
+else
+    echo ">>> ERROR: $FILE not found!"
+    exit 1
+fi
+
 git clone https://github.com/gSpotx2f/luci-app-cpu-status package/luci-app-cpu-status
-git clone https://github.com/gSpotx2f/luci-app-cpu-perf package/luci-app-cpu-perf
 git clone https://github.com/gSpotx2f/luci-app-interfaces-statistics package/luci-app-interfaces-statistics
 git clone https://github.com/gSpotx2f/luci-app-temp-status package/luci-app-temp-status
 git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netports
+#git clone https://github.com/gSpotx2f/luci-app-cpu-perf package/luci-app-cpu-perf
 
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 rm -rf feeds/packages/net/adguardhome
@@ -14,7 +24,6 @@ rm -rf package/luci-app-adguardhome/patches
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/luci-app-honk package/honk
-git clone https://github.com/meow-rs/meow-rs package/meow-rs
 
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
