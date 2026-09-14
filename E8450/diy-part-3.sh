@@ -12,6 +12,7 @@ rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/zow2023/luci-app-adguardhome.git package/luci-app-adguardhome
 rm -rf package/luci-app-adguardhome/patches
+git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
 
 git clone https://github.com/zow2023/luci-app-meow package/meow
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
