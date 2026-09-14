@@ -117,10 +117,12 @@ jobs:
         run: |
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+          sed -i '/CONFIG_KERNEL_DEBUG_INFO_DWARF/d' openwrt/.config
+          echo "CONFIG_KERNEL_DEBUG_INFO_DWARF4=y" >> openwrt/.config
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
-
+          
       - name: SSH connection to Actions
         uses: P3TERX/ssh2actions@v1.0.0
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
@@ -173,13 +175,30 @@ jobs:
           echo -e "$(nproc) thread compile"
           make -j"$(nproc)" || make -j1 || make -j1 V=s
 
-          echo "===== 验证 CGROUP_BPF 进入最终内核配置 ====="
+          # —— 现有的 CGROUP_BPF 逐项验证（位置不动）——
           KCFG=$(ls build_dir/target-*/linux-*/linux-*/.config | head -n1)
-          echo "最终内核配置: $KCFG"
-          grep -q '^CONFIG_CGROUPS=y'       "$KCFG" || { echo "!!! CGROUPS 未生效";      exit 1; }
+          grep -q '^CONFIG_CGROUPS=y'        "$KCFG" || { echo "!!! CGROUPS 未生效";      exit 1; }
           grep -q '^CONFIG_SOCK_CGROUP_DATA=y' "$KCFG" || { echo "!!! SOCK_CGROUP_DATA 未生效"; exit 1; }
-          grep -q '^CONFIG_CGROUP_BPF=y'    "$KCFG" || { echo "!!! CGROUP_BPF 未生效";   exit 1; }
-          grep -q '^CONFIG_DEBUG_INFO_BTF=y' "$KCFG" || { echo "!!! DEBUG_INFO_BTF 未生效（BTF 缺失）"; exit 1; }  
+          grep -q '^CONFIG_CGROUP_BPF=y'     "$KCFG" || { echo "!!! CGROUP_BPF 未生效";   exit 1; }
+          grep -q '^CONFIG_DEBUG_INFO_BTF=y' "$KCFG" || { echo "!!! DEBUG_INFO_BTF 未生效"; exit 1; }
+
+          # ↓↓↓ 新增 ①：BTF/DWARF 配置打印（定位证据）
+          echo "===== BTF/DWARF 相关配置 ====="
+          grep -E 'CONFIG_DEBUG_INFO|CONFIG_PAHOLE|CONFIG_DEBUG_INFO_BTF' "$KCFG"
+          KDIR=$(dirname "$KCFG")
+
+          # ↓↓↓ 新增 ③：vmlinux BTF 校验（刷机前拦截）
+          echo "===== 验证 vmlinux BTF ====="
+          BPFTOOL=$(find build_dir -path '*tools/bpf/bpftool/bpftool' -type f 2>/dev/null | head -1)
+          echo "bpftool: ${BPFTOOL:-未找到}"
+          if [ -n "$BPFTOOL" ]; then
+            "$BPFTOOL" btf dump file "$KDIR/vmlinux" > /dev/null \
+              || { echo "!!! vmlinux BTF 畸形，构建中止（无需刷机验证）!!!"; exit 1; }
+            echo "BTF 校验通过"
+          else
+            echo "!!! bpftool 未找到，请检查路径"
+          fi
+  
             
           echo "status=success" >> $GITHUB_OUTPUT
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
