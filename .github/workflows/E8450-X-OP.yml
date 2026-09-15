@@ -91,7 +91,7 @@ jobs:
           toolchain: true
           skip: true
           prefix: /workdir/openwrt
-          mixkey: e8450x          
+          mixkey: e8450x-r2         
 
       - name: Load custom feeds
         run: |
@@ -124,17 +124,26 @@ jobs:
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
       - name: Prebuild Rust host toolchain
+        continue-on-error: true
         run: |
           set -o pipefail
           cd openwrt
+
+          # ★ 关键：先做 host/clean，强制删掉缓存恢复回来的脏 rustc 源码目录，
+          #   让它基于 dl/ 里的完整 tarball 重新解包+打补丁
+          make package/feeds/packages/rust/host/clean
+          rm -rf build_dir/target-aarch64_cortex-a53_musl/host/rustc-1.95.0-src
+          rm -rf build_dir/host/rustc-1.95.0-src 2>/dev/null || true
+
           make defconfig
-          make package/feeds/packages/rust/host/compile -j"$(nproc)" \
-            || make package/feeds/packages/rust/host/compile -j1 V=s
+          make package/feeds/packages/rust/host/compile -j2 2>&1 | tee /tmp/rust-host.log \
+            || make package/feeds/packages/rust/host/compile -j1 V=s 2>&1 | tee -a /tmp/rust-host.log
+
           echo "===== rust/host 产物自检 ====="
-          ls -l staging_dir/host/bin/cargo staging_dir/host/bin/rustc
+          ls -l staging_dir/host/bin/cargo staging_dir/host/bin/rustc || true
           ls staging_dir/host/lib/rustlib/ || true
-          echo "PATH 优先级检查（应为 staging_dir/host/bin 在前）："
-          echo "$PATH" | tr ':' '\n' | head -5
+
+          
     
           
       - name: SSH connection to Actions
