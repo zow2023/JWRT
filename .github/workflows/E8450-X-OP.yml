@@ -122,6 +122,20 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
+
+      - name: Prebuild Rust host toolchain
+        run: |
+          set -o pipefail
+          cd openwrt
+          make defconfig
+          make package/feeds/packages/rust/host/compile -j"$(nproc)" \
+            || make package/feeds/packages/rust/host/compile -j1 V=s
+          echo "===== rust/host 产物自检 ====="
+          ls -l staging_dir/host/bin/cargo staging_dir/host/bin/rustc
+          ls staging_dir/host/lib/rustlib/ || true
+          echo "PATH 优先级检查（应为 staging_dir/host/bin 在前）："
+          echo "$PATH" | tr ':' '\n' | head -5
+    
           
       - name: SSH connection to Actions
         uses: P3TERX/ssh2actions@v1.0.0
