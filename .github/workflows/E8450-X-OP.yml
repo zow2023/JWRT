@@ -91,7 +91,7 @@ jobs:
           toolchain: true
           skip: true
           prefix: /workdir/openwrt
-          mixkey: e8450x-r2         
+          mixkey: e8450x          
 
       - name: Load custom feeds
         run: |
@@ -122,56 +122,6 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
-
-      - name: Prebuild Rust host toolchain
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          cd openwrt
-
-          # ★ 关键：先做 host/clean，强制删掉缓存恢复回来的脏 rustc 源码目录，
-          #   让它基于 dl/ 里的完整 tarball 重新解包+打补丁
-          make package/feeds/packages/rust/host/clean
-          rm -rf build_dir/target-aarch64_cortex-a53_musl/host/rustc-1.95.0-src
-          rm -rf build_dir/host/rustc-1.95.0-src 2>/dev/null || true
-
-          make defconfig
-          make package/feeds/packages/rust/host/compile -j2 2>&1 | tee /tmp/rust-host.log \
-            || make package/feeds/packages/rust/host/compile -j1 V=s 2>&1 | tee -a /tmp/rust-host.log
-
-          echo "===== rust/host 产物自检 ====="
-          ls -l staging_dir/host/bin/cargo staging_dir/host/bin/rustc || true
-          ls staging_dir/host/lib/rustlib/ || true
-
-           # ============================================================
-      # ★ 新增：给 runner 的 rustup 安装 aarch64 musl 交叉 std
-      #   rust/host 编译失败时（continue-on-error 兜底），
-      #   meow 会回落到 rustup 的 cargo；没有这个 target 的 std
-      #   就会报 can't find crate for core。每次 run 都必须执行
-      #   ——GitHub 托管 runner 是全新机器，不持久化。
-      #   参考 meow 官方 CI 的做法（rustup + target add），
-      #   链接仍由 rust-package.mk 注入的
-      #   aarch64-openwrt-linux-musl-gcc 完成。
-      # ============================================================
-      - name: Add musl target to runner rustup
-        run: |
-          set -e
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-          rustup target add aarch64-unknown-linux-musl
-
-          echo "===== 已安装的 target ====="
-          rustup target list --installed
-
-          SYSROOT=$(rustc --print sysroot)
-          echo "sysroot: $SYSROOT"
-          ls "$SYSROOT/lib/rustlib/"
-
-          # 硬性验证：musl std 必须在位，否则让 step 直接失败暴露问题
-          test -d "$SYSROOT/lib/rustlib/aarch64-unknown-linux-musl/lib" \
-            || { echo "!!! aarch64-unknown-linux-musl 的 std 未安装"; exit 1; }
-          echo "aarch64-unknown-linux-musl std 验证通过"   
-    
           
       - name: SSH connection to Actions
         uses: P3TERX/ssh2actions@v1.0.0
