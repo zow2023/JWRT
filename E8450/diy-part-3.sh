@@ -25,7 +25,7 @@ git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
 rm -rf package/helloworld/luci-app-daed
 rm -rf package/helloworld/mihomo-alpha
-rm -rf package/helloword/luci-app-ssr-plus
+rm -rf package/helloworld/luci-app-ssr-plus
 
 rm -rf feeds/packages/lang/node
 #git clone https://github.com/sbwml/feeds_packages_lang_node-prebuilt -b packages-24.10 feeds/packages/lang/node
