@@ -53,3 +53,29 @@ sed -i 's/OpenWrt/W6-WRT/g' package/base-files/files/bin/config_generate
 
 echo "CONFIG_DEVEL=y" >> .config
 echo "CONFIG_CCACHE=y" >> .config
+
+# ===============================================
+# Predator W6: 禁用 WED，修复 5GHz (mt798x-wmac) 无法获取 IP 问题
+# ===============================================
+FILE_WED="target/linux/mediatek/dts/mt7986a-acer-w6-common.dtsi"
+if [ -f "$FILE_WED" ]; then
+    if ! grep -q 'diy-disable-wed' "$FILE_WED"; then
+        cat >> "$FILE_WED" << 'EOF'
+
+/* diy-disable-wed: disable WED, fix 5G DHCP issue */
+&wed0 {
+	status = "disabled";
+};
+
+&wed1 {
+	status = "disabled";
+};
+EOF
+        echo ">>> Predator W6: WED disabled (wed0/wed1 -> disabled)"
+    else
+        echo ">>> Predator W6: WED patch already applied, skip"
+    fi
+else
+    echo ">>> ERROR: $FILE_WED not found!"
+    exit 1
+fi
