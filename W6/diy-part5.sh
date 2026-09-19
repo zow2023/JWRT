@@ -22,11 +22,16 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/zow2023/luci-app-adguardhome.git package/luci-app-adguardhome
 rm -rf package/luci-app-adguardhome/patches
 
+git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
+git clone https://github.com/zow2023/luci-app-meow package/meow
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/luci-app-honk package/honk
 
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
+rm -rf package/helloworld/luci-app-daed
+rm -rf package/helloworld/mihomo-alpha
+rm -rf package/helloworld/luci-app-ssr-plus
 
 rm -rf feeds/packages/lang/node
 git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
