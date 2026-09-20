@@ -45,6 +45,14 @@ sed -i 's/192.168.15.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 # OpenWrt 24.10 精确修改 mac80211.uc 默认开启无线
 sed -i 's/\${defaults ? 0 : 1}/0/g' package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc
 
+# 解除 5G/6G 频宽 80MHz 硬性限制，允许 160MHz
+FILE_WIFI="package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
+if [ -f "$FILE_WIFI" ]; then
+    # 删除强制 80MHz 截断的两行
+    sed -i '/else if (width > 80)/,+1d' "$FILE_WIFI"
+    echo ">>> Removed 80MHz width cap in mac80211.uc"
+fi
+
 # Modify default theme
 #sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
 
