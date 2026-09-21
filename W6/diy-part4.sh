@@ -10,7 +10,8 @@
 # See /LICENSE for more information.
 #
 
-rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
+rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata}
+#sing-box}
 #rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
 #git clone https://github.com/kenzok78/luci-app-adguardhome.git package/luci-app-adguardhome
@@ -26,12 +27,18 @@ git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcont
 
 rm -rf feeds/luci/applications/luci-app-dae
 rm -rf feeds/luci/applications/luci-app-daed
-rm -rf feeds/luci/applications/luci-app-homeproxy
+#rm -rf feeds/luci/applications/luci-app-homeproxy
 rm -rf feeds/packages/net/{dae,daed}
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
-git clone https://github.com/zow2023/luci-app-honk package/honk
+git clone https://github.com/zow2023/luci-app-meow package/meow
+git clone https://github.com/QiuSimons/luci-app-honk package/honk
+#git clone https://github.com/zow2023/luci-app-honk package/honk
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
+rm -rf package/helloworld/luci-app-dae
+rm -rf package/helloworld/luci-app-daed
+rm -rf package/helloworld/mihomo-alpha
+rm -rf package/helloworld/luci-app-ssr-plus
 rm -rf package/helloworld/dae
 
 rm -rf feeds/packages/lang/node
