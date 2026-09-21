@@ -32,15 +32,14 @@ rm -rf feeds/packages/net/{dae,daed}
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/luci-app-meow package/meow
-git clone https://github.com/QiuSimons/luci-app-honk package/honk
-#git clone https://github.com/zow2023/luci-app-honk package/honk
+git clone https://github.com/zow2023/luci-app-honk package/honk
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
 rm -rf package/helloworld/luci-app-daed
 rm -rf package/helloworld/mihomo-alpha
 rm -rf package/helloworld/luci-app-ssr-plus
 rm -rf package/helloworld/dae
-
+#git clone https://github.com/QiuSimons/luci-app-honk package/honk
 rm -rf feeds/packages/lang/node
 git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
 
