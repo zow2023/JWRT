@@ -59,12 +59,18 @@ fi
 # Modify hostname
 sed -i 's/OpenWrt/W6-WRT/g' package/base-files/files/bin/config_generate
 
+CFG=package/base-files/files/bin/config_generate
+# 修改 timezone
+sed -i "s/option timezone 'UTC'/option timezone 'CST-8'/g" $CFG
+sed -i "s/set system.@system\[-1\]\.timezone='UTC'/set system.@system[-1].timezone='CST-8'/g" $CFG
+# 添加 zonename（避免重复添加）
+grep -q "zonename='Asia/Shanghai'" $CFG || \
+sed -i "/set system.@system\[-1\]\.timezone='CST-8'/a\        set system.@system[-1].zonename='Asia/Shanghai'" $CFG
+
 echo "CONFIG_DEVEL=y" >> .config
 echo "CONFIG_CCACHE=y" >> .config
 
-# ===============================================
 # Predator W6: 禁用 WED，修复 5GHz (mt798x-wmac) 无法获取 IP 问题
-# ===============================================
 FILE_WED="target/linux/mediatek/dts/mt7986a-acer-w6-common.dtsi"
 if [ -f "$FILE_WED" ]; then
     if ! grep -q 'diy-disable-wed' "$FILE_WED"; then
