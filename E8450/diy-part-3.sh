@@ -41,12 +41,9 @@ sed -i 's/192.168.15.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 sed -i 's/\${defaults ? 0 : 1}/0/g' package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc
 
 CFG=package/base-files/files/bin/config_generate
-# 修改 timezone
-sed -i "s/option timezone 'UTC'/option timezone 'CST-8'/g" $CFG
-sed -i "s/set system.@system\[-1\]\.timezone='UTC'/set system.@system[-1].timezone='CST-8'/g" $CFG
-# 添加 zonename（避免重复添加）
-grep -q "zonename='Asia/Shanghai'" $CFG || \
-sed -i "/set system.@system\[-1\]\.timezone='CST-8'/a\        set system.@system[-1].zonename='Asia/Shanghai'" $CFG
+sed -i "s/set system.@system\[-1\].timezone=.*/set system.@system[-1].timezone='CST-8'/g" $CFG
+sed -i "s/set system.@system\[-1\].zonename=.*/set system.@system[-1].zonename='Asia\/Shanghai'/g" $CFG
+grep -E "timezone|zonename" $CFG
 
 # Modify default theme
 #sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
