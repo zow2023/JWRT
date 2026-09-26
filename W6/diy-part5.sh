@@ -60,12 +60,9 @@ fi
 sed -i 's/OpenWrt/W6-WRT/g' package/base-files/files/bin/config_generate
 
 CFG=package/base-files/files/bin/config_generate
-# 修改 timezone
-sed -i "s/option timezone 'UTC'/option timezone 'CST-8'/g" $CFG
-sed -i "s/set system.@system\[-1\]\.timezone='UTC'/set system.@system[-1].timezone='CST-8'/g" $CFG
-# 添加 zonename（避免重复添加）
-grep -q "zonename='Asia/Shanghai'" $CFG || \
-sed -i "/set system.@system\[-1\]\.timezone='CST-8'/a\        set system.@system[-1].zonename='Asia/Shanghai'" $CFG
+sed -i "s/set system.@system\[-1\].timezone=.*/set system.@system[-1].timezone='CST-8'/g" $CFG
+sed -i "s/set system.@system\[-1\].zonename=.*/set system.@system[-1].zonename='Asia\/Shanghai'/g" $CFG
+grep -E "timezone|zonename" $CFG
 
 echo "CONFIG_DEVEL=y" >> .config
 echo "CONFIG_CCACHE=y" >> .config
