@@ -47,7 +47,7 @@ rm -rf feeds/packages/net/{dae,daed}
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
-#rm -rf package/helloworld/luci-app-daed
+rm -rf package/helloworld/luci-app-daed
 rm -rf package/helloworld/dae
 
 # git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
@@ -69,13 +69,18 @@ rm -rf feeds/packages/lang/node
 git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
 
 rm -rf feeds/packages/lang/golang
-git clone https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
+git clone https://github.com/sbwml/packages_lang_golang -b 27.x feeds/packages/lang/golang
 
 # Modify default IP
 sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
 # OpenWrt 24.10 精确修改 mac80211.uc 默认开启无线
 sed -i 's/\${defaults ? 0 : 1}/0/g' package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc
+
+CFG=package/base-files/files/bin/config_generate
+sed -i "s/set system.@system\[-1\].timezone=.*/set system.@system[-1].timezone='CST-8'/g" $CFG
+sed -i "s/set system.@system\[-1\].zonename=.*/set system.@system[-1].zonename='Asia\/Shanghai'/g" $CFG
+grep -E "timezone|zonename" $CFG
 
 # Modify default theme
 #sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
