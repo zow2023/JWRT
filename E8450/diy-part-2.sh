@@ -47,6 +47,7 @@ rm -rf feeds/packages/net/{dae,daed}
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 git clone https://github.com/zow2023/luci-app-meow package/meow
+git clone https://github.com/zow2023/luci-app-honk package/honk
 rm -rf package/helloworld/luci-app-dae
 rm -rf package/helloworld/luci-app-daed
 rm -rf package/helloworld/dae
