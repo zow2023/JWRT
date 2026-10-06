@@ -7,6 +7,7 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 git clone https://github.com/zow2023/luci-app-adguardhome package/luci-app-adguardhome
 rm -rf package/luci-app-adguardhome/patches
 #git clone https://github.com/w9315273/luci-app-adguardhome package/luci-app-adguardhome
+git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
 
 rm -rf feeds/luci/applications/luci-app-dae
 rm -rf feeds/luci/applications/luci-app-daed
@@ -16,18 +17,20 @@ rm -rf feeds/packages/net/{dae,daed}
 #git clone https://github.com/gaobin89/luci-app-timecontrol package/luci-app-timecontrol
 git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
 git clone https://github.com/zow2023/luci-app-meow package/meow
+git clone https://github.com/zow2023/luci-app-honk package/honk
 
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 rm -rf package/helloworld/luci-app-dae
-#rm -rf package/helloworld/luci-app-daed
-rm -rf package/helloworld/dae
+rm -rf package/helloworld/luci-app-daed
+rm -rf package/helloworld/mihomo-alpha
+rm -rf package/helloworld/luci-app-ssr-plus
 
 rm -rf feeds/packages/lang/node
 git clone https://github.com/sbwml/feeds_packages_lang_node -b packages-25.12 feeds/packages/lang/node
 
 rm -rf feeds/packages/lang/golang
-git clone https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
+git clone https://github.com/sbwml/packages_lang_golang -b 27.x feeds/packages/lang/golang
 
 # Modify default IP
 sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
