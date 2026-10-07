@@ -121,7 +121,7 @@ jobs:
             done | sha256sum | cut -c1-12
           )"
 
-          TOOLCHAIN_TAG="toolchain-e8450-${SAFE_BRANCH}-${SOURCE_COMMIT}-${CONFIG_HASH}"
+          TOOLCHAIN_TAG="toolchain-w6-${SAFE_BRANCH}-${SOURCE_COMMIT}-${CONFIG_HASH}"
           echo "TOOLCHAIN_TAG=${TOOLCHAIN_TAG}" >> "$GITHUB_ENV"
           echo "Toolchain cache tag: ${TOOLCHAIN_TAG}"
 
