@@ -15,8 +15,9 @@ on:
         default: false
         type: boolean
 
+# 避免相同分支同时运行时互相覆盖 Toolchain Release。
 concurrency:
-  group: e8450-${{ inputs.branch || 'v25.12.0' }}
+  group: e8450-${{ github.event.inputs.branch || 'v25.12.0' }}
   cancel-in-progress: false
 
 permissions:
@@ -24,7 +25,7 @@ permissions:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: ${{ inputs.branch || 'v25.12.0' }}
+  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.0' }}
 
   FEEDS_CONF: E8450/feeds.conf.default
   CONFIG_FILE: E8450/im2512.config
@@ -35,6 +36,7 @@ env:
   UPLOAD_FIRMWARE: "true"
   UPLOAD_RELEASE: "false"
 
+  # 与 actions/cache 的缓存路径保持一致。
   CCACHE_DIR: /workdir/openwrt/.ccache
 
   TZ: Asia/Shanghai
@@ -97,6 +99,8 @@ jobs:
           ln -sfn /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
           mkdir -p /workdir/openwrt/.ccache
 
+      # Toolchain 标签按上游源码 commit 和本仓库构建配置生成；
+      # 源码或配置改变时会使用新的缓存标签。
       - name: Prepare Toolchain cache key
         working-directory: ${{ github.workspace }}
         run: |
@@ -125,9 +129,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /workdir/openwrt/.ccache
-          key: ccache-${{ runner.os }}-e8450-${{ env.REPO_BRANCH }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}
+          key: ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}
           restore-keys: |
-            ccache-${{ runner.os }}-e8450-${{ env.REPO_BRANCH }}-
+            ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-
 
       - name: Restore Toolchain from Release
         id: restore-toolchain
@@ -233,12 +237,12 @@ jobs:
               "$cfg"
 
             cat >> "$cfg" <<'EOF'
-CONFIG_NET_SCH_BPF=y
-CONFIG_BPF_SYSCALL=y
-CONFIG_BPF_JIT=y
-CONFIG_NETKIT=y
-CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y
-EOF
+          CONFIG_NET_SCH_BPF=y
+          CONFIG_BPF_SYSCALL=y
+          CONFIG_BPF_JIT=y
+          CONFIG_NETKIT=y
+          CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y
+          EOF
           done < <(find target/linux/mediatek -name 'config-6*' -print0)
 
       - name: Download packages
@@ -249,15 +253,16 @@ EOF
 
           make defconfig
 
+          # 确保 OpenWrt 使用 ccache，并与工作流缓存目录一致。
           sed -i \
             -e '/^CONFIG_CCACHE=/d' \
             -e '/^CONFIG_CCACHE_DIR=/d' \
             .config
 
           cat >> .config <<'EOF'
-CONFIG_CCACHE=y
-CONFIG_CCACHE_DIR="/workdir/openwrt/.ccache"
-EOF
+          CONFIG_CCACHE=y
+          CONFIG_CCACHE_DIR="/workdir/openwrt/.ccache"
+          EOF
 
           make defconfig
           make download -j"$(nproc)"
