@@ -1,11 +1,5 @@
 #
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
-#
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
-# Description: Build X-WRT OpenWrt for Acer Predator W6 using GitHub Actions (Optimized)
-#
 
 name: W6-X-OP
 
@@ -84,14 +78,16 @@ jobs:
           git clone $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-      - name: Cache OpenWrt Build
-        uses: klever1988/cachewrtbuild@main
+       - name: Cache ccache
+        uses: actions/cache@v4
         with:
-          ccache: true
-          toolchain: true
-          skip: true
-          prefix: /workdir/openwrt
-          mixkey: w6x
+          path: /workdir/openwrt/.ccache
+          # 每次运行使用新 key，否则精确命中后 actions/cache 不会保存更新后的 ccache。
+          key: ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ hashFiles('W6/w6x.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part5.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          # 同分支回退到最新的历史缓存，普通软件包配置变化仍可复用 ccache。
+          restore-keys: |
+            ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
+            ccache-${{ runner.os }}-w6-
           
       - name: Load custom feeds
         run: |
@@ -128,6 +124,36 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
+      - name: Prepare download cache key
+        working-directory: /workdir/openwrt
+        run: |
+          set -euo pipefail
+
+          DOWNLOAD_SOURCE_HASH="$(
+            {
+              printf 'openwrt %s\n' "$(git rev-parse HEAD)"
+              while IFS= read -r -d '' git_entry; do
+                repo="${git_entry%/.git}"
+                if [[ -d "$repo" && -e "$repo/.git" ]]; then
+                  commit="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf unknown)"
+                  printf '%s %s\n' "${repo#/workdir/openwrt/}" "$commit"
+                fi
+              done < <(find feeds package -name .git -print0)
+            } | LC_ALL=C sort | sha256sum | cut -c1-12
+          )"
+
+          echo "DOWNLOAD_SOURCE_HASH=${DOWNLOAD_SOURCE_HASH}" >> "$GITHUB_ENV"
+          echo "Download source hash: ${DOWNLOAD_SOURCE_HASH}"
+
+      - name: Cache OpenWrt download sources
+        uses: actions/cache@v4
+        with:
+          path: /workdir/openwrt/dl
+          key: dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('W6/w6x.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part5.sh') }}
+          restore-keys: |
+            dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
+            dl-${{ runner.os }}-w6-    
+
       - name: Patch Kernel Config
         run: |
           cd openwrt
@@ -146,14 +172,126 @@ jobs:
           done
 
 
-      - name: Download package
+      - name: Cache OpenWrt download sources
+        uses: actions/cache@v4
+        with:
+          path: /workdir/openwrt/dl
+          key: dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('W6/mtkw6.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part4.sh') }}
+          restore-keys: |
+            dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
+            dl-${{ runner.os }}-w6-
+
+      - name: Download packages
         id: package
         run: |
+          set -euo pipefail
           cd openwrt
+
+          make defconfig
+
+          # 确保 OpenWrt 使用 ccache，并与工作流缓存目录一致。
+          sed -i \
+            -e '/^CONFIG_CCACHE=/d' \
+            -e '/^CONFIG_CCACHE_DIR=/d' \
+            .config
+
+          cat >> .config <<'EOF'
+          CONFIG_CCACHE=y
+          CONFIG_CCACHE_DIR="/workdir/openwrt/.ccache"
+          EOF
+
           make defconfig
           make download -j"$(nproc)"
+
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
+
+          
+        - name: Prepare Toolchain cache key
+        working-directory: /workdir/openwrt
+        run: |
+          set -euo pipefail
+
+          SAFE_BRANCH="$(printf '%s' "$REPO_BRANCH" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | cut -c1-24)"
+
+          # 使用 tools/ 与 toolchain/ 的 Git tree 对象哈希，避免普通源码提交
+          # 或软件包选择变化导致工具链缓存失效。
+          TOOLCHAIN_SOURCE_HASH="$(
+            {
+              git rev-parse HEAD:tools
+              git rev-parse HEAD:toolchain
+            } | sha256sum | cut -c1-12
+          )"
+
+          # 只纳入架构、ABI、C 库、GCC/Binutils、BPF/LLVM 等工具链相关选项。
+          # 普通 CONFIG_PACKAGE_* 与 CONFIG_CCACHE_DIR 不参与此哈希。
+          # 注意：TARGET_mediatek(_[A-Za-z0-9]+)? 覆盖 mt7981/mt7986/mt7988/filogic 等子目标。
+          TOOLCHAIN_CONFIG_HASH="$(
+            grep -E '^(# )?CONFIG_(ARCH|ARCH_64BIT|BIG_ENDIAN|aarch64|arm|mipsel|TARGET_BOARD|TARGET_SUBTARGET|TARGET_mediatek(_[A-Za-z0-9]+)?|TARGET_ARCH_PACKAGES|TARGET_OPTIMIZATION|TARGET_CPU|CPU_TYPE|CPU_SUBTYPE|SOFT_FLOAT|USE_MIPS16|TOOLCHAINOPTS|EXTERNAL_TOOLCHAIN|NATIVE_TOOLCHAIN|EXTERNAL_GCC_VERSION|EXTERNAL_TOOLCHAIN_LIBC_USE_(GLIBC|MUSL)|TOOLCHAIN_(LIBC|PREFIX|ROOT|INC_PATH|LIB_PATH|BIN_PATH)|EXTRA_TARGET_ARCH(_NAME|_OPTS)?|MIPS64_ABI_(N64|N32|O32)|LIBC_USE_(GLIBC|MUSL)|USE_(GLIBC|MUSL)|MUSL_DISABLE_CRYPT_SIZE_HACK|GCC_USE_VERSION_[0-9]+|GCC_USE_GRAPHITE|EXTRA_GCC_CONFIG_OPTIONS|GCC_DEFAULT_(PIE|SSP)|SJLJ_EXCEPTIONS|INSTALL_(GFORTRAN|GCCGO)|BINUTILS_USE_VERSION_[0-9_]+|EXTRA_BINUTILS_CONFIG_OPTIONS|BPF_TOOLCHAIN(_NONE|_PREBUILT|_BUILD_LLVM|_HOST|_HOST_PATH)?|HAS_PREBUILT_LLVM_TOOLCHAIN|USE_LLVM_(HOST|BUILD|PREBUILT)|DWARVES|GDB(_PYTHON)?|NASM)(=.*| is not set)$' .config \
+              | LC_ALL=C sort \
+              | sha256sum \
+              | cut -c1-12
+          )"
+
+          TOOLCHAIN_TAG="toolchain-w6-v1-${SAFE_BRANCH}-${TOOLCHAIN_SOURCE_HASH}-${TOOLCHAIN_CONFIG_HASH}"
+
+          echo "SAFE_BRANCH=${SAFE_BRANCH}" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_SOURCE_HASH=${TOOLCHAIN_SOURCE_HASH}" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_CONFIG_HASH=${TOOLCHAIN_CONFIG_HASH}" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_TAG=${TOOLCHAIN_TAG}" >> "$GITHUB_ENV"
+
+          echo "Toolchain source hash: ${TOOLCHAIN_SOURCE_HASH}"
+          echo "Toolchain config hash: ${TOOLCHAIN_CONFIG_HASH}"
+          echo "Toolchain cache tag: ${TOOLCHAIN_TAG}"
+
+      # 工具链持久化到 Release：不受 actions/cache 7 天过期与 10GB 配额限制。
+      - name: Restore Toolchain from Release
+        id: restore-toolchain
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          DOWNLOAD_DIR="/tmp/toolchain-cache"
+          mkdir -p "$DOWNLOAD_DIR"
+
+          echo "Checking Toolchain Release: ${TOOLCHAIN_TAG}"
+
+          if ! gh release download "$TOOLCHAIN_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "toolchain.tar.zst" \
+            --dir "$DOWNLOAD_DIR"; then
+            echo "No usable Toolchain Release found; building Toolchain from source."
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if ! tar -I zstd -xf "$DOWNLOAD_DIR/toolchain.tar.zst" -C /workdir/openwrt; then
+            echo "Toolchain archive could not be extracted; rebuilding it."
+            rm -rf /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool*
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # 确认归档里确实有工具链目录。
+          shopt -s nullglob
+          HOST_PATHS=(/workdir/openwrt/staging_dir/host*)
+          TOOL_PATHS=(/workdir/openwrt/staging_dir/tool*)
+
+          if (( ${#HOST_PATHS[@]} == 0 || ${#TOOL_PATHS[@]} == 0 )); then
+            echo "Toolchain archive is missing staging_dir/host* or staging_dir/tool*."
+            rm -rf /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool*
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # 恢复成功后，从顶层 Makefile 移除工具链 stamp 依赖，跳过工具链编译。
+          cd /workdir/openwrt
+          sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
+          sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
+
+          echo "TOOLCHAIN_EXISTS=true" >> "$GITHUB_ENV"
+          echo "Toolchain cache restored and toolchain build dependencies skipped."  
 
       - name: Compile the firmware
         id: compile
@@ -183,6 +321,72 @@ jobs:
           echo "===== ccache 编译统计 ====="
           ccache -s
 
+
+      - name: Save Toolchain to Release
+        id: save-toolchain
+        if: ${{ steps.compile.outputs.status == 'success' && env.TOOLCHAIN_EXISTS != 'true' && !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd /workdir/openwrt
+
+          shopt -s nullglob
+          CACHE_PATHS=(staging_dir/host* staging_dir/tool*)
+
+          if (( ${#CACHE_PATHS[@]} == 0 )); then
+            echo "No staging_dir/host* or staging_dir/tool* paths found; cannot save Toolchain cache."
+            exit 1
+          fi
+
+          echo "Packing Toolchain cache paths: ${CACHE_PATHS[*]}"
+          tar -I 'zstd -3' -cf toolchain.tar.zst "${CACHE_PATHS[@]}"
+
+          if gh release view "$TOOLCHAIN_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release exists; replacing its Toolchain asset."
+            gh release upload "$TOOLCHAIN_TAG" toolchain.tar.zst \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            echo "Creating Toolchain Release."
+            gh release create "$TOOLCHAIN_TAG" toolchain.tar.zst \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Toolchain Cache (${TOOLCHAIN_TAG})" \
+              --notes "OpenWrt Toolchain cache (staging_dir/host* and staging_dir/tool*)."
+          fi
+
+      # 工具链升级换代后，删除与当前 tag 不匹配的旧 toolchain-* Release，
+      # 避免缓存 Release 无限堆积。
+      - name: Delete stale Toolchain Releases
+        if: ${{ steps.compile.outputs.status == 'success' && !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          echo "Current Toolchain tag: ${TOOLCHAIN_TAG}"
+          echo "Removing stale toolchain releases..."
+
+          STALE_TAGS="$(
+            gh release list --repo "$GITHUB_REPOSITORY" \
+              --limit 100 --json tagName --jq '.[].tagName' \
+              | grep -E '^toolchain-w6-v1-' \
+              | grep -v -F "${TOOLCHAIN_TAG}" || true
+          )"
+
+          if [[ -z "$STALE_TAGS" ]]; then
+            echo "No stale Toolchain releases found."
+            exit 0
+          fi
+
+          while IFS= read -r stale_tag; do
+            [[ -z "$stale_tag" ]] && continue
+            echo "Deleting stale release: ${stale_tag}"
+            gh release delete "$stale_tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cleanup-tag --yes
+          done <<< "$STALE_TAGS"    
+
       - name: Upload bin directory
         uses: actions/upload-artifact@v4
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
@@ -206,35 +410,9 @@ jobs:
           name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
-      - name: Generate release tag
-        id: tag
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-        run: |
-          echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-          touch release.txt
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v2
-        if: steps.tag.outputs.status == 'success' && !cancelled()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          body_path: release.txt
-          files: ${{ env.FIRMWARE }}/*
 
       - name: Delete workflow runs
         uses: GitRML/delete-workflow-runs@main
         with:
           retain_days: 1
           keep_minimum_runs: 3
-
-      - name: Remove old Releases
-        uses: dev-drprasad/delete-older-releases@v0.3.0
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-        with:
-          keep_latest: 3
-          delete_tags: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
