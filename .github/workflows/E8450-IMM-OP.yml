@@ -97,13 +97,15 @@ jobs:
           df -hT "$PWD"
           git clone --depth 1 --single-branch -b "$REPO_BRANCH" "$REPO_URL" openwrt
           ln -sfn /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
-          mkdir -p /workdir/openwrt/.ccache
+          mkdir -p /workdir/openwrt/.ccache /workdir/openwrt/dl
 
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: /workdir/openwrt/.ccache
-          key: ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}
+          # 每次运行使用新 key，否则精确命中后 actions/cache 不会保存更新后的 ccache。
+          key: ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          # 同分支回退到最新的历史缓存，普通软件包配置变化仍可复用 ccache。
           restore-keys: |
             ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-
 
@@ -188,6 +190,37 @@ jobs:
           CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y
           EOF
           done < <(find target/linux/mediatek -name 'config-6*' -print0)
+
+      # 对源码和 feeds 的当前提交生成下载缓存指纹；版本变化时产生新缓存，避免旧归档永久不更新。
+      - name: Prepare download cache key
+        working-directory: /workdir/openwrt
+        run: |
+          set -euo pipefail
+
+          DOWNLOAD_SOURCE_HASH="$(
+            {
+              printf 'openwrt %s\n' "$(git rev-parse HEAD)"
+              while IFS= read -r -d '' git_entry; do
+                repo="${git_entry%/.git}"
+                if [[ -d "$repo" && -e "$repo/.git" ]]; then
+                  commit="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf unknown)"
+                  printf '%s %s\n' "${repo#/workdir/openwrt/}" "$commit"
+                fi
+              done < <(find feeds package -name .git -print0)
+            } | LC_ALL=C sort | sha256sum | cut -c1-12
+          )"
+
+          echo "DOWNLOAD_SOURCE_HASH=${DOWNLOAD_SOURCE_HASH}" >> "$GITHUB_ENV"
+          echo "Download source hash: ${DOWNLOAD_SOURCE_HASH}"
+
+      # 缓存 make download 获取的源码归档，减少每次运行的重复网络下载。
+      - name: Cache OpenWrt download sources
+        uses: actions/cache@v4
+        with:
+          path: /workdir/openwrt/dl
+          key: dl-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}
+          restore-keys: |
+            dl-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-
 
       - name: Download packages
         id: package
@@ -399,35 +432,9 @@ jobs:
           name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
-      - name: Generate release tag
-        id: tag
-        if: ${{ env.UPLOAD_RELEASE == 'true' && !cancelled() }}
-        run: |
-          echo "release_tag=$(date +'%Y.%m.%d-%H%M')" >> "$GITHUB_OUTPUT"
-          touch release.txt
-          echo "status=success" >> "$GITHUB_OUTPUT"
-
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v2
-        if: ${{ steps.tag.outputs.status == 'success' && !cancelled() }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          body_path: release.txt
-          files: ${{ env.FIRMWARE }}/*
 
       - name: Delete workflow runs
         uses: GitRML/delete-workflow-runs@main
         with:
           retain_days: 1
           keep_minimum_runs: 3
-
-      - name: Remove old Releases
-        uses: dev-drprasad/delete-older-releases@v0.3.0
-        if: ${{ env.UPLOAD_RELEASE == 'true' && !cancelled() }}
-        with:
-          keep_latest: 3
-          delete_tags: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
