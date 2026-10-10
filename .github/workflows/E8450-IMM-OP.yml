@@ -99,32 +99,6 @@ jobs:
           ln -sfn /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
           mkdir -p /workdir/openwrt/.ccache
 
-      # Toolchain 标签按上游源码 commit 和本仓库构建配置生成；
-      # 源码或配置改变时会使用新的缓存标签。
-      - name: Prepare Toolchain cache key
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-
-          SOURCE_COMMIT="$(git -C /workdir/openwrt rev-parse --short=12 HEAD)"
-          SAFE_BRANCH="$(printf '%s' "$REPO_BRANCH" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | cut -c1-24)"
-
-          CONFIG_HASH="$(
-            for file in \
-              "$FEEDS_CONF" \
-              "$CONFIG_FILE" \
-              "$DIY_P1_SH" \
-              "$DIY_P2_SH"; do
-              if [[ -f "$file" ]]; then
-                sha256sum "$file"
-              fi
-            done | sha256sum | cut -c1-12
-          )"
-
-          TOOLCHAIN_TAG="toolchain-e8450-${SAFE_BRANCH}-${SOURCE_COMMIT}-${CONFIG_HASH}"
-          echo "TOOLCHAIN_TAG=${TOOLCHAIN_TAG}" >> "$GITHUB_ENV"
-          echo "Toolchain cache tag: ${TOOLCHAIN_TAG}"
-
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -132,36 +106,6 @@ jobs:
           key: ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}
           restore-keys: |
             ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-
-
-      - name: Restore Toolchain from Release
-        id: restore-toolchain
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          DOWNLOAD_DIR="/tmp/toolchain-cache"
-          mkdir -p "$DOWNLOAD_DIR"
-
-          echo "Checking Toolchain Release: ${TOOLCHAIN_TAG}"
-
-          if gh release download "$TOOLCHAIN_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "toolchain.tar.zst" \
-            --dir "$DOWNLOAD_DIR"; then
-
-            if tar -I zstd -xf "$DOWNLOAD_DIR/toolchain.tar.zst" -C /workdir/openwrt; then
-              echo "TOOLCHAIN_EXISTS=true" >> "$GITHUB_ENV"
-              echo "Toolchain cache restored."
-            else
-              echo "Toolchain archive could not be extracted; rebuilding it."
-              rm -rf /workdir/openwrt/staging_dir
-              echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
-            fi
-          else
-            echo "No usable Toolchain Release found; building Toolchain from source."
-            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
-          fi
 
       - name: Load custom feeds
         run: |
@@ -270,6 +214,94 @@ jobs:
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
+      # 只根据工具链源码和真正影响工具链的 .config 项生成缓存标签。
+      # 放在 make defconfig 与软件包下载之后，保证读取的是规范化后的最终配置。
+      - name: Prepare Toolchain cache key
+        working-directory: /workdir/openwrt
+        run: |
+          set -euo pipefail
+
+          SAFE_BRANCH="$(printf '%s' "$REPO_BRANCH" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | cut -c1-24)"
+
+          # 使用 tools/ 与 toolchain/ 的 Git tree 对象哈希，避免普通源码提交
+          # 或 HomeProxy、sing-box 等软件包选择变化导致工具链缓存失效。
+          TOOLCHAIN_SOURCE_HASH="$(
+            {
+              git rev-parse HEAD:tools
+              git rev-parse HEAD:toolchain
+            } | sha256sum | cut -c1-12
+          )"
+
+          # 只纳入架构、ABI、C 库、GCC/Binutils、BPF/LLVM 等工具链相关选项。
+          # 普通 CONFIG_PACKAGE_* 与 CONFIG_CCACHE_DIR 不参与此哈希。
+          TOOLCHAIN_CONFIG_HASH="$(
+            grep -E '^(# )?CONFIG_(ARCH|ARCH_64BIT|BIG_ENDIAN|aarch64|arm|mipsel|TARGET_BOARD|TARGET_SUBTARGET|TARGET_mediatek|TARGET_mediatek_mt7622|TARGET_ARCH_PACKAGES|TARGET_OPTIMIZATION|TARGET_CPU|CPU_TYPE|CPU_SUBTYPE|SOFT_FLOAT|USE_MIPS16|TOOLCHAINOPTS|EXTERNAL_TOOLCHAIN|NATIVE_TOOLCHAIN|EXTERNAL_GCC_VERSION|EXTERNAL_TOOLCHAIN_LIBC_USE_(GLIBC|MUSL)|TOOLCHAIN_(LIBC|PREFIX|ROOT|INC_PATH|LIB_PATH|BIN_PATH)|EXTRA_TARGET_ARCH(_NAME|_OPTS)?|MIPS64_ABI_(N64|N32|O32)|LIBC_USE_(GLIBC|MUSL)|USE_(GLIBC|MUSL)|MUSL_DISABLE_CRYPT_SIZE_HACK|GCC_USE_VERSION_[0-9]+|GCC_USE_GRAPHITE|EXTRA_GCC_CONFIG_OPTIONS|GCC_DEFAULT_(PIE|SSP)|SJLJ_EXCEPTIONS|INSTALL_(GFORTRAN|GCCGO)|BINUTILS_USE_VERSION_[0-9_]+|EXTRA_BINUTILS_CONFIG_OPTIONS|BPF_TOOLCHAIN(_NONE|_PREBUILT|_BUILD_LLVM|_HOST|_HOST_PATH)?|HAS_PREBUILT_LLVM_TOOLCHAIN|USE_LLVM_(HOST|BUILD|PREBUILT)|DWARVES|GDB(_PYTHON)?|NASM)(=.*| is not set)$' .config \
+              | LC_ALL=C sort \
+              | sha256sum \
+              | cut -c1-12
+          )"
+
+          # v2 用于和旧版“整份配置文件哈希”的缓存标签隔离。
+          TOOLCHAIN_TAG="toolchain-e8450-v2-${SAFE_BRANCH}-${TOOLCHAIN_SOURCE_HASH}-${TOOLCHAIN_CONFIG_HASH}"
+
+          echo "SAFE_BRANCH=${SAFE_BRANCH}" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_SOURCE_HASH=${TOOLCHAIN_SOURCE_HASH}" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_CONFIG_HASH=${TOOLCHAIN_CONFIG_HASH}" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_TAG=${TOOLCHAIN_TAG}" >> "$GITHUB_ENV"
+
+          echo "Toolchain source hash: ${TOOLCHAIN_SOURCE_HASH}"
+          echo "Toolchain config hash: ${TOOLCHAIN_CONFIG_HASH}"
+          echo "Toolchain cache tag: ${TOOLCHAIN_TAG}"
+
+      - name: Restore Toolchain from Release
+        id: restore-toolchain
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          DOWNLOAD_DIR="/tmp/toolchain-cache"
+          mkdir -p "$DOWNLOAD_DIR"
+
+          echo "Checking Toolchain Release: ${TOOLCHAIN_TAG}"
+
+          if ! gh release download "$TOOLCHAIN_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "toolchain.tar.zst" \
+            --dir "$DOWNLOAD_DIR"; then
+            echo "No usable Toolchain Release found; building Toolchain from source."
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if ! tar -I zstd -xf "$DOWNLOAD_DIR/toolchain.tar.zst" -C /workdir/openwrt; then
+            echo "Toolchain archive could not be extracted; rebuilding it."
+            rm -rf /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool*
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # 确认归档里确实有 cachewrtbuild 风格的目录。
+          shopt -s nullglob
+          HOST_PATHS=(/workdir/openwrt/staging_dir/host*)
+          TOOL_PATHS=(/workdir/openwrt/staging_dir/tool*)
+
+          if (( ${#HOST_PATHS[@]} == 0 || ${#TOOL_PATHS[@]} == 0 )); then
+            echo "Toolchain archive is missing staging_dir/host* or staging_dir/tool*."
+            rm -rf /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool*
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # 与 cachewrtbuild 的跳过方式保持一致：缓存确认恢复成功后，
+          # 从顶层 Makefile 移除工具链 stamp-compile/stamp-install 依赖。
+          cd /workdir/openwrt
+          sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
+          sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
+
+          echo "TOOLCHAIN_EXISTS=true" >> "$GITHUB_ENV"
+          echo "Toolchain cache restored and toolchain build dependencies skipped."
+
       - name: Compile the firmware
         id: compile
         run: |
@@ -307,13 +339,16 @@ jobs:
           set -euo pipefail
           cd /workdir/openwrt
 
-          if [[ ! -d staging_dir ]]; then
-            echo "staging_dir not found; cannot save Toolchain cache."
+          shopt -s nullglob
+          CACHE_PATHS=(staging_dir/host* staging_dir/tool*)
+
+          if (( ${#CACHE_PATHS[@]} == 0 )); then
+            echo "No staging_dir/host* or staging_dir/tool* paths found; cannot save Toolchain cache."
             exit 1
           fi
 
-          echo "Packing staging_dir..."
-          tar -I 'zstd -3' -cf toolchain.tar.zst staging_dir
+          echo "Packing Toolchain cache paths: ${CACHE_PATHS[*]}"
+          tar -I 'zstd -3' -cf toolchain.tar.zst "${CACHE_PATHS[@]}"
 
           if gh release view "$TOOLCHAIN_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release exists; replacing its Toolchain asset."
@@ -325,7 +360,7 @@ jobs:
             gh release create "$TOOLCHAIN_TAG" toolchain.tar.zst \
               --repo "$GITHUB_REPOSITORY" \
               --title "Toolchain Cache (${TOOLCHAIN_TAG})" \
-              --notes "OpenWrt Toolchain cache."
+              --notes "OpenWrt Toolchain cache (staging_dir/host* and staging_dir/tool*)."
           fi
 
       - name: Upload bin directory
