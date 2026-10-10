@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
+#
 
 name: W6-X-OP
 
@@ -88,7 +89,7 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
             ccache-${{ runner.os }}-w6-
-          
+
       - name: Load custom feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
@@ -107,7 +108,7 @@ jobs:
           cd /workdir/openwrt
           rm -rf feeds/packages/lang/rust
           git clone --depth 1 https://github.com/sbwml/packages_lang_rust.git feeds/packages/lang/rust
-          ./scripts/feeds install -f rust        
+          ./scripts/feeds install -f rust
 
       - name: Load custom configuration
         run: |
@@ -152,7 +153,16 @@ jobs:
           key: dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('W6/w6x.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part5.sh') }}
           restore-keys: |
             dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
-            dl-${{ runner.os }}-w6-    
+            dl-${{ runner.os }}-w6-
+
+      # 修复 2：restore-keys 回退会把旧缓存里的 dl/go-mod-cache 一并带回来，
+      # Go 包（如 sing-box）的同版本号 re-tag 依赖会因缓存已存在而跳过下载，
+      # 导致 "no required module provides package" 编译失败。在下载/编译前清除它。
+      - name: Purge stale Go module cache
+        run: |
+          set -euo pipefail
+          rm -rf /workdir/openwrt/dl/go-mod-cache
+          echo "dl/go-mod-cache purged."
 
       - name: Patch Kernel Config
         run: |
@@ -171,42 +181,6 @@ jobs:
             echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
           done
 
-
-      - name: Cache OpenWrt download sources
-        uses: actions/cache@v4
-        with:
-          path: /workdir/openwrt/dl
-          key: dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('W6/mtkw6.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part4.sh') }}
-          restore-keys: |
-            dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
-            dl-${{ runner.os }}-w6-
-
-      - name: Download packages
-        id: package
-        run: |
-          set -euo pipefail
-          cd openwrt
-
-          make defconfig
-
-          # 确保 OpenWrt 使用 ccache，并与工作流缓存目录一致。
-          sed -i \
-            -e '/^CONFIG_CCACHE=/d' \
-            -e '/^CONFIG_CCACHE_DIR=/d' \
-            .config
-
-          cat >> .config <<'EOF'
-          CONFIG_CCACHE=y
-          CONFIG_CCACHE_DIR="/workdir/openwrt/.ccache"
-          EOF
-
-          make defconfig
-          make download -j"$(nproc)"
-
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
-
-          
       - name: Prepare Toolchain cache key
         working-directory: /workdir/openwrt
         run: |
@@ -291,7 +265,34 @@ jobs:
           sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
 
           echo "TOOLCHAIN_EXISTS=true" >> "$GITHUB_ENV"
-          echo "Toolchain cache restored and toolchain build dependencies skipped."  
+          echo "Toolchain cache restored and toolchain build dependencies skipped."
+
+      - name: Download packages
+        id: package
+        run: |
+          set -euo pipefail
+          cd openwrt
+
+          make defconfig
+
+          # 确保 OpenWrt 使用 ccache，并与工作流缓存目录一致。
+          sed -i \
+            -e '/^CONFIG_CCACHE=/d' \
+            -e '/^CONFIG_CCACHE_DIR=/d' \
+            .config
+
+          cat >> .config <<'EOF'
+          CONFIG_CCACHE=y
+          CONFIG_CCACHE_DIR="/workdir/openwrt/.ccache"
+          EOF
+
+          make defconfig
+          make download -j"$(nproc)"
+
+          # 修复 3：清理小于 1KB 的坏文件时排除 dl/go-mod-cache，
+          # 其中大量锁文件/元数据小于 1KB，误删会制造内容残缺的 Go 模块缓存。
+          find dl -path dl/go-mod-cache -prune -o -size -1024c -exec ls -l {} \;
+          find dl -path dl/go-mod-cache -prune -o -size -1024c -exec rm -f {} \;
 
       - name: Compile the firmware
         id: compile
@@ -303,7 +304,7 @@ jobs:
           mkdir -p ~/.ccache
           ccache -M 5G
           ccache -z
-          
+
           echo -e "$(nproc) thread compile"
           make -j"$(nproc)" || make -j1 || make -j1 V=s
 
@@ -320,7 +321,6 @@ jobs:
 
           echo "===== ccache 编译统计 ====="
           ccache -s
-
 
       - name: Save Toolchain to Release
         id: save-toolchain
@@ -385,7 +385,7 @@ jobs:
             gh release delete "$stale_tag" \
               --repo "$GITHUB_REPOSITORY" \
               --cleanup-tag --yes
-          done <<< "$STALE_TAGS"    
+          done <<< "$STALE_TAGS"
 
       - name: Upload bin directory
         uses: actions/upload-artifact@v4
@@ -409,7 +409,6 @@ jobs:
         with:
           name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
-
 
       - name: Delete workflow runs
         uses: GitRML/delete-workflow-runs@main
