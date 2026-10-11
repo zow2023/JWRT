@@ -21,14 +21,18 @@ permissions:
 env:
   REPO_URL: https://github.com/zow2023/immortalwrt-mt798x-rebase
   REPO_BRANCH: 25.12
+
   FEEDS_CONF: W6/feeds.conf.default
   CONFIG_FILE: W6/mtkw6.config
   DIY_P1_SH: W6/diy-part1.sh
   DIY_P2_SH: W6/diy-part4.sh
+
   UPLOAD_BIN_DIR: 'false'
   UPLOAD_FIRMWARE: 'true'
-  # ccache 命令与 OpenWrt 的 CONFIG_CCACHE_DIR 保持一致。
+
   CCACHE_DIR: /workdir/openwrt/.ccache
+  CACHE_VERSION: v1
+
   TZ: Asia/Shanghai
 
 jobs:
@@ -93,18 +97,16 @@ jobs:
           ln -sfn /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
           mkdir -p /workdir/openwrt/dl /workdir/openwrt/.ccache
 
-      # 仅保留 ccache 一条 actions/cache 通道（与 cachewrtbuild 的传输量对齐，
-      # 不再缓存 dl）。即使 ccache 7 天未访问被驱逐，工具链仍可从 Release 恢复。
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: /workdir/openwrt/.ccache
-          # 每次运行使用新 key，否则精确命中后 actions/cache 不会保存更新后的 ccache。
-          key: ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ hashFiles('W6/mtkw6.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part4.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          # 同分支回退到最新的历史缓存，普通软件包配置变化仍可复用 ccache。
+
+          key: ccache-${{ env.CACHE_VERSION }}-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ hashFiles('W6/mtkw6.config','W6/feeds.conf.default','W6/diy-part*.sh') }}
+
           restore-keys: |
-            ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
-            ccache-${{ runner.os }}-w6-
+            ccache-${{ env.CACHE_VERSION }}-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
+            ccache-${{ env.CACHE_VERSION }}-${{ runner.os }}-w6-
 
       - name: Load custom feeds
         run: |
@@ -262,6 +264,20 @@ jobs:
 
           echo "TOOLCHAIN_EXISTS=true" >> "$GITHUB_ENV"
           echo "Toolchain cache restored and toolchain build dependencies skipped."
+
+      - name: Cache OpenWrt build state
+        uses: actions/cache@v4
+        with:
+          path: |
+            /workdir/openwrt/build_dir
+            /workdir/openwrt/staging_dir/target-*
+            /workdir/openwrt/tmp
+
+          key: buildstate-${{ env.CACHE_VERSION }}-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ hashFiles('W6/mtkw6.config','W6/diy-part*.sh') }}
+
+          restore-keys: |
+             buildstate-${{ env.CACHE_VERSION }}-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
+             buildstate-${{ env.CACHE_VERSION }}-${{ runner.os }}-w6-
 
       - name: Compile the firmware
         id: compile
