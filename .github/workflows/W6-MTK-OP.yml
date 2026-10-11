@@ -116,8 +116,10 @@ jobs:
           exit 0
         fi
 
+        # 必须用 -D(--dir) 而非 -O: 同时下 工具链 + 2 个 ccache 卷,
+        # -O 要求单文件输出,会出现 "unable to write more than one asset with '--output'"
         if ! gh release download "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-             -O /tmp/cache -p 'toolchain.tar.gz-*' -p 'ccache_*.tar.gz-*'; then
+             -D /tmp/cache -p 'toolchain.tar.gz-*' -p 'ccache_*.tar.gz-*'; then
           echo "Cache miss: download failed, will build from scratch"
           exit 0
         fi
@@ -147,9 +149,25 @@ jobs:
         sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
         echo "Toolchain building skipped"
 
+        # --- 验证还原是否真正生效 ---
+        echo "===== 缓存还原验证 ====="
+        echo "--- staging_dir (应能看到 host* / tool* 子目录) ---"
+        ls -d /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool* 2>/dev/null | head -10 || echo "(empty)"
+        du -sh /workdir/openwrt/staging_dir 2>/dev/null
+        echo "--- Makefile stamp 检查 (不为空表示 sed 未生效) ---"
+        if grep -E 'stamp-compile|stamp-install' /workdir/openwrt/Makefile; then
+          echo "!! WARNING: sed 未生效,下次编译会重建工具链"
+        else
+          echo "(ok: toolchain stamps stripped, 不再重建)"
+        fi
+        echo "--- ccache 还原 ---"
+        ls -la /workdir/openwrt/.ccache 2>/dev/null | head -5
+        ls -la $HOME/.ccache 2>/dev/null | head -5
+        ccache -s 2>/dev/null | head -10 || true
+        echo "===== 验证完毕 ====="
+
         rm -rf /tmp/cache
         echo "hit=1" >> $GITHUB_OUTPUT
-        
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
@@ -260,7 +278,10 @@ jobs:
         # --- 分卷 (Release 单资产上限 2GiB,留出余量) ---
         cd /tmp/cacheout
         for f in toolchain.tar.gz ccache_topdir.tar.gz ccache_home.tar.gz; do
-          [ -f "$f" ] && split -b 1900M -d "$f" "${f}-"
+          if [ -f "$f" ]; then
+            split -b 1900M -d "$f" "${f}-"
+            rm -f "$f"   # 删除原始档案,避免 Release 体积翻倍
+          fi
         done
         ls -lh /tmp/cacheout
 
@@ -330,15 +351,6 @@ jobs:
         [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload firmware to release
-      uses: softprops/action-gh-release@v2
-      if: steps.tag.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
 
     - name: Delete workflow runs
       uses: GitRML/delete-workflow-runs@main
