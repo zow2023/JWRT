@@ -89,85 +89,106 @@ jobs:
     # 归档路径与 utils.js 完全一致: staging_dir/host* + staging_dir/tool* (+ .ccache)
     # 命中后执行与 fetch.js 相同的 sed,跳过工具链编译
     # ============================================================
-    - name: Restore build cache (release)
-      id: restore
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        cd /workdir/openwrt
+          - name: Restore build cache (release)
+        id: restore
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 本步骤自行管理错误处理, 避免探测性命令的非零退出码中止脚本
+          set +e
+          cd /workdir/openwrt
 
-        # --- 与 cachewrtbuild/utils.js 完全一致的 key 计算 ---
-        TOOLCHAIN_HASH=$(git log --pretty=tformat:"%h" -n1 tools toolchain)
-        CACHE_TAG="${CACHE_PREFIX}-${TOOLCHAIN_HASH}"
-        echo "CACHE_TAG=${CACHE_TAG}" >> $GITHUB_ENV
-        echo "Cache key (release tag): ${CACHE_TAG}"
+          # --- 与 cachewrtbuild/utils.js 完全一致的 key 计算 ---
+          TOOLCHAIN_HASH=$(git log --pretty=tformat:"%h" -n1 tools toolchain)
+          CACHE_TAG="${CACHE_PREFIX}-${TOOLCHAIN_HASH}"
+          echo "CACHE_TAG=${CACHE_TAG}" >> $GITHUB_ENV
+          echo "Cache key (release tag): ${CACHE_TAG}"
 
-        # --- clean: true 对齐上游 clean 输入 (fetch.js/save.js 顶部检查): 跳过还原并删除缓存 Release ---
-        if [ "${{ github.event.inputs.clean_cache }}" = "true" ]; then
-          echo "clean=true: skip restore, deleting cache release ${CACHE_TAG}"
-          gh release delete "$CACHE_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
-          exit 0
-        fi
+          # --- clean: true 对齐上游 clean 输入: 跳过还原并删除缓存 Release ---
+          if [ "${{ github.event.inputs.clean_cache }}" = "true" ]; then
+            echo "clean=true: skip restore, deleting cache release ${CACHE_TAG}"
+            gh release delete "$CACHE_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+            exit 0
+          fi
 
-        mkdir -p /tmp/cache
-        # Release/资产不存在时按未命中处理,走完整编译
-        if ! gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-          echo "Cache miss: release ${CACHE_TAG} not found, will build from scratch"
-          exit 0
-        fi
+          mkdir -p /tmp/cache
 
-        # 必须用 -D(--dir) 而非 -O: 同时下 工具链 + 2 个 ccache 卷,
-        # -O 要求单文件输出,会出现 "unable to write more than one asset with '--output'"
-        if ! gh release download "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-             -D /tmp/cache -p 'toolchain.tar.gz-*' -p 'ccache_*.tar.gz-*'; then
-          echo "Cache miss: download failed, will build from scratch"
-          exit 0
-        fi
+          # --- Release 不存在时按未命中处理, 走完整编译 ---
+          if ! gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Cache miss: release ${CACHE_TAG} not found, will build from scratch"
+            exit 0
+          fi
 
-        # --- 还原工具链 (staging_dir/host* + staging_dir/tool*) ---
-        # 对齐 fetch.js: 只有工具链缓存体成功还原才算命中,才执行 sed 跳过;
-        # 资产缺失(上次保存不完整)时按未命中处理,避免跳过编译导致失败
-        if ! ls /tmp/cache/toolchain.tar.gz-* >/dev/null 2>&1; then
-          echo "Toolchain asset missing, treating as cache miss"
-          exit 0
-        fi
-        cat /tmp/cache/toolchain.tar.gz-* | tar xzf - -C /workdir/openwrt
-        echo "Toolchain cache restored"
+          # --- 下载缓存资产 (必须用 -D: 同时下 工具链 + 2 个 ccache 卷) ---
+          if ! gh release download "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+               -D /tmp/cache -p 'toolchain.tar.gz-*' -p 'ccache_*.tar.gz-*'; then
+            echo "Cache miss: download failed, will build from scratch"
+            rm -rf /tmp/cache
+            exit 0
+          fi
 
-        # --- 还原 ccache (对齐 action 缓存的 openwrt/.ccache,同时兜底 ~/.ccache) ---
-        if ls /tmp/cache/ccache_topdir.tar.gz-* >/dev/null 2>&1; then
-          cat /tmp/cache/ccache_topdir.tar.gz-* | tar xzf - -C /workdir/openwrt
-          echo "ccache (openwrt/.ccache) restored"
-        fi
-        if ls /tmp/cache/ccache_home.tar.gz-* >/dev/null 2>&1; then
-          cat /tmp/cache/ccache_home.tar.gz-* | tar xzf - -C $HOME
-          echo "ccache (~/.ccache) restored"
-        fi
+          # --- 工具链资产缺失时按未命中处理 ---
+          if ! ls /tmp/cache/toolchain.tar.gz-* >/dev/null 2>&1; then
+            echo "Toolchain asset missing, treating as cache miss"
+            rm -rf /tmp/cache
+            exit 0
+          fi
 
-        # --- 与 cachewrtbuild/fetch.js 命中逻辑逐字一致:改 Makefile 跳过工具链 ---
-        sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
-        sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
-        echo "Toolchain building skipped"
+          # --- 排查用: 打印 tar 包内前几个条目, 确认路径前缀 ---
+          echo "--- tarball preview (top 5 entries) ---"
+          tar tzf "$(ls /tmp/cache/toolchain.tar.gz-* | head -1)" | head -5
 
-        # --- 验证还原是否真正生效 ---
-        echo "===== 缓存还原验证 ====="
-        echo "--- staging_dir (应能看到 host* / tool* 子目录) ---"
-        ls -d /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool* 2>/dev/null | head -10 || echo "(empty)"
-        du -sh /workdir/openwrt/staging_dir 2>/dev/null
-        echo "--- Makefile stamp 检查 (不为空表示 sed 未生效) ---"
-        if grep -E 'stamp-compile|stamp-install' /workdir/openwrt/Makefile; then
-          echo "!! WARNING: sed 未生效,下次编译会重建工具链"
-        else
-          echo "(ok: toolchain stamps stripped, 不再重建)"
-        fi
-        echo "--- ccache 还原 ---"
-        ls -la /workdir/openwrt/.ccache 2>/dev/null | head -5
-        ls -la $HOME/.ccache 2>/dev/null | head -5
-        ccache -s 2>/dev/null | head -10 || true
-        echo "===== 验证完毕 ====="
+          cat /tmp/cache/toolchain.tar.gz-* | tar xzf - -C /workdir/openwrt
+          echo "Toolchain cache restored"
 
-        rm -rf /tmp/cache
-        echo "hit=1" >> $GITHUB_OUTPUT
+          # --- 还原 ccache ---
+          if ls /tmp/cache/ccache_topdir.tar.gz-* >/dev/null 2>&1; then
+            cat /tmp/cache/ccache_topdir.tar.gz-* | tar xzf - -C /workdir/openwrt
+            echo "ccache (openwrt/.ccache) restored"
+          fi
+          if ls /tmp/cache/ccache_home.tar.gz-* >/dev/null 2>&1; then
+            cat /tmp/cache/ccache_home.tar.gz-* | tar xzf - -C "$HOME"
+            echo "ccache (~/.ccache) restored"
+          fi
+
+          # ==================================================================
+          # 关键: 只有 staging_dir 真正还原出了 toolchain 才算命中, 才跳过编译
+          # ==================================================================
+          if ! ls -d /workdir/openwrt/staging_dir/tool* >/dev/null 2>&1; then
+            echo "!! staging_dir/tool* NOT restored (tarball empty or wrong prefix), treating as cache miss"
+            echo "   -> will build toolchain from scratch (sed skipped)"
+            rm -rf /tmp/cache
+            exit 0
+          fi
+
+          # --- 命中确认: 改 Makefile 跳过工具链编译 ---
+          sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
+          sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
+          echo "Toolchain building skipped"
+
+          # --- 验证还原 (全部兜底, 不会中止脚本) ---
+          echo "===== 缓存还原验证 ====="
+          echo "--- staging_dir ---"
+          ls -d /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool* 2>/dev/null || echo "(no host*/tool* dirs)"
+          du -sh /workdir/openwrt/staging_dir 2>/dev/null || echo "(du failed)"
+
+          echo "--- Makefile stamp 检查 (不为空表示 sed 未生效) ---"
+          if grep -E 'stamp-compile|stamp-install' /workdir/openwrt/Makefile; then
+            echo "!! WARNING: sed 未生效, 下次编译会重建工具链"
+          else
+            echo "(ok: toolchain stamps stripped, 不再重建)"
+          fi
+
+          echo "--- ccache 还原 ---"
+          ls -la /workdir/openwrt/.ccache 2>/dev/null | head -5 || echo "(no openwrt/.ccache)"
+          ls -la "$HOME/.ccache" 2>/dev/null | head -5 || echo "(no ~/.ccache)"
+          ccache -s 2>/dev/null | head -10 || true
+
+          echo "===== 验证完毕 ====="
+          rm -rf /tmp/cache
+          echo "hit=1" >> $GITHUB_OUTPUT
+
+        
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
