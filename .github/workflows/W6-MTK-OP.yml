@@ -27,7 +27,7 @@ env:
   DIY_P2_SH: W6/diy-part4.sh
   UPLOAD_BIN_DIR: 'false'
   UPLOAD_FIRMWARE: 'true'
-  # 与下方 ccache 缓存路径保持一致。
+  # ccache 命令与 OpenWrt 的 CONFIG_CCACHE_DIR 保持一致。
   CCACHE_DIR: /workdir/openwrt/.ccache
   TZ: Asia/Shanghai
 
@@ -88,14 +88,13 @@ jobs:
           set -euo pipefail
           df -hT "$PWD"
 
-          # 工具链缓存键改用 git tree 哈希计算，不再依赖 git log，
-          # 因此可以浅克隆以加快速度。
+          # 工具链缓存键使用 git tree 哈希计算，可以浅克隆以加快速度。
           git clone --depth 1 --single-branch -b "$REPO_BRANCH" "$REPO_URL" openwrt
           ln -sfn /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
           mkdir -p /workdir/openwrt/dl /workdir/openwrt/.ccache
 
-      # ccache 走 actions/cache；即使超过 7 天未访问被驱逐，
-      # 工具链仍可从 Release 恢复，损失可控。
+      # 仅保留 ccache 一条 actions/cache 通道（与 cachewrtbuild 的传输量对齐，
+      # 不再缓存 dl）。即使 ccache 7 天未访问被驱逐，工具链仍可从 Release 恢复。
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -149,48 +148,6 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      # 对源码和 feeds 的当前提交生成下载缓存指纹；版本变化时产生新缓存，
-      # 避免旧归档永久不更新。
-      - name: Prepare download cache key
-        working-directory: /workdir/openwrt
-        run: |
-          set -euo pipefail
-
-          DOWNLOAD_SOURCE_HASH="$(
-            {
-              printf 'openwrt %s\n' "$(git rev-parse HEAD)"
-              while IFS= read -r -d '' git_entry; do
-                repo="${git_entry%/.git}"
-                if [[ -d "$repo" && -e "$repo/.git" ]]; then
-                  commit="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf unknown)"
-                  printf '%s %s\n' "${repo#/workdir/openwrt/}" "$commit"
-                fi
-              done < <(find feeds package -name .git -print0)
-            } | LC_ALL=C sort | sha256sum | cut -c1-12
-          )"
-
-          echo "DOWNLOAD_SOURCE_HASH=${DOWNLOAD_SOURCE_HASH}" >> "$GITHUB_ENV"
-          echo "Download source hash: ${DOWNLOAD_SOURCE_HASH}"
-
-      # 缓存 make download 获取的源码归档，减少每次运行的重复网络下载。
-      - name: Cache OpenWrt download sources
-        uses: actions/cache@v4
-        with:
-          path: /workdir/openwrt/dl
-          key: dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('W6/mtkw6.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part4.sh') }}
-          restore-keys: |
-            dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
-            dl-${{ runner.os }}-w6-
-
-      # 修复 1：restore-keys 回退会把旧缓存里的 dl/go-mod-cache 一并带回来，
-      # Go 包（如 sing-box）的同版本号 re-tag 依赖会因缓存已存在而跳过下载，
-      # 导致 "no required module provides package" 编译失败。在下载/编译前清除它。
-      - name: Purge stale Go module cache
-        run: |
-          set -euo pipefail
-          rm -rf /workdir/openwrt/dl/go-mod-cache
-          echo "dl/go-mod-cache purged."
-
       - name: Download packages
         id: package
         run: |
@@ -213,13 +170,12 @@ jobs:
           make defconfig
           make download -j"$(nproc)"
 
-          # 修复 2：清理小于 1KB 的坏文件时排除 dl/go-mod-cache，
-          # 其中大量锁文件/元数据小于 1KB，误删会制造内容残缺的 Go 模块缓存。
+          # 清理小于 1KB 的坏文件时排除 dl/go-mod-cache（锁文件/元数据小于 1KB）。
           find dl -path dl/go-mod-cache -prune -o -size -1024c -exec ls -l {} \;
           find dl -path dl/go-mod-cache -prune -o -size -1024c -exec rm -f {} \;
 
       # 只根据工具链源码和真正影响工具链的 .config 项生成缓存标签。
-      # 放在 make defconfig 与软件包下载之后，保证读取的是规范化后的最终配置。
+      # 放在 make defconfig 之后，保证读取的是规范化后的最终配置。
       - name: Prepare Toolchain cache key
         working-directory: /workdir/openwrt
         run: |
@@ -299,6 +255,7 @@ jobs:
           fi
 
           # 恢复成功后，从顶层 Makefile 移除工具链 stamp 依赖，跳过工具链编译。
+          # 与 klever1988/cachewrtbuild fetch.js 中的 skip 逻辑相同。
           cd /workdir/openwrt
           sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
           sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
@@ -334,6 +291,7 @@ jobs:
           ccache -s
 
       # 仅在本次为冷编译（未命中工具链缓存）且编译成功时，保存工具链到 Release。
+      # zstd -T0 使用全部核心多线程压缩，缩短打包时间。
       - name: Save Toolchain to Release
         id: save-toolchain
         if: ${{ steps.compile.outputs.status == 'success' && env.TOOLCHAIN_EXISTS != 'true' && !cancelled() }}
@@ -352,7 +310,7 @@ jobs:
           fi
 
           echo "Packing Toolchain cache paths: ${CACHE_PATHS[*]}"
-          tar -I 'zstd -3' -cf toolchain.tar.zst "${CACHE_PATHS[@]}"
+          tar -I 'zstd -T0 -3' -cf toolchain.tar.zst "${CACHE_PATHS[@]}"
 
           if gh release view "$TOOLCHAIN_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release exists; replacing its Toolchain asset."
