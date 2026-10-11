@@ -85,9 +85,8 @@ jobs:
     # ============================================================
     # 替代 klever1988/cachewrtbuild@main 的 fetch 阶段
     # key 组成与 utils.js 完全一致:
-    #   ${mixkey}-cache-openwrt-$(git log --pretty=tformat:"%h" -n1 tools toolchain)
-    # 归档路径与 utils.js 完全一致: staging_dir/host* + staging_dir/tool* (+ .ccache)
-    # 命中后执行与 fetch.js 相同的 sed,跳过工具链编译
+    #   ${mixkey}-cache-openwrt-$(git log -n1 tools toolchain 的 hash)
+    # 命中后执行与 fetch.js 相同的 sed, 跳过工具链编译
     # ============================================================
     - name: Restore build cache (release)
       id: restore
@@ -97,11 +96,13 @@ jobs:
         set +e
         cd /workdir/openwrt
 
+        # --- 与 cachewrtbuild/utils.js 完全一致的 key 计算 ---
         TOOLCHAIN_HASH=$(git log --pretty=tformat:"%h" -n1 tools toolchain)
         CACHE_TAG="${CACHE_PREFIX}-${TOOLCHAIN_HASH}"
         echo "CACHE_TAG=${CACHE_TAG}" >> $GITHUB_ENV
         echo "Cache key (release tag): ${CACHE_TAG}"
 
+        # --- clean: true 对齐上游 clean 输入: 跳过还原并删除缓存 Release ---
         if [ "${{ github.event.inputs.clean_cache }}" = "true" ]; then
           echo "clean=true: skip restore, deleting cache release ${CACHE_TAG}"
           gh release delete "$CACHE_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
@@ -110,11 +111,13 @@ jobs:
 
         mkdir -p /tmp/cache
 
+        # --- Release 不存在时按未命中处理, 走完整编译 ---
         if ! gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
           echo "Cache miss: release ${CACHE_TAG} not found, will build from scratch"
           exit 0
         fi
 
+        # --- 下载缓存资产 (必须用 -D: 同时下 工具链 + ccache 卷) ---
         if ! gh release download "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
              -D /tmp/cache -p 'toolchain.tar.gz-*' -p 'ccache_*.tar.gz-*'; then
           echo "Cache miss: download failed, will build from scratch"
@@ -122,54 +125,63 @@ jobs:
           exit 0
         fi
 
+        # --- 工具链资产缺失时按未命中处理 ---
         if ! ls /tmp/cache/toolchain.tar.gz-* >/dev/null 2>&1; then
           echo "Toolchain asset missing, treating as cache miss"
           rm -rf /tmp/cache
           exit 0
         fi
 
+        # --- 排查用: 打印 tar 包内前几个条目, 确认路径前缀 ---
+        echo "--- tarball preview (top 5 entries) ---"
+        tar tzf "$(ls /tmp/cache/toolchain.tar.gz-* | head -1)" | head -5
+
+        # 工具链归档由 save 侧用 -C staging_dir 打包, 此处对称解压
         mkdir -p /workdir/openwrt/staging_dir
         cat /tmp/cache/toolchain.tar.gz-* | tar xzf - -C /workdir/openwrt/staging_dir
         echo "Toolchain cache restored"
 
+        # --- 还原 ccache (OpenWrt CONFIG_CCACHE 实际使用 $(TOPDIR)/.ccache) ---
         if ls /tmp/cache/ccache_topdir.tar.gz-* >/dev/null 2>&1; then
           cat /tmp/cache/ccache_topdir.tar.gz-* | tar xzf - -C /workdir/openwrt
           echo "ccache (openwrt/.ccache) restored"
         fi
-        if ls /tmp/cache/ccache_home.tar.gz-* >/dev/null 2>&1; then
-          cat /tmp/cache/ccache_home.tar.gz-* | tar xzf - -C "$HOME"
-          echo "ccache (~/.ccache) restored"
-        fi
 
+        # ==================================================================
+        # 关键: 只有 staging_dir 真正还原出了 toolchain 才算命中, 才跳过编译
+        # ==================================================================
         if ! ls -d /workdir/openwrt/staging_dir/tool* >/dev/null 2>&1; then
           echo "staging_dir/tool* NOT restored, treating as cache miss, will build toolchain from scratch"
           rm -rf /tmp/cache
           exit 0
         fi
 
+        # --- 命中确认: 改 Makefile 跳过工具链编译 (与 fetch.js 一致) ---
         sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
         sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
         echo "Toolchain building skipped"
 
+        # --- 验证还原 (全部兜底, 不会中止脚本) ---
         echo "===== restore verify ====="
+        echo "--- staging_dir ---"
         ls -d /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool* 2>/dev/null || echo "(no host*/tool* dirs)"
         du -sh /workdir/openwrt/staging_dir 2>/dev/null || echo "(du failed)"
 
-        if grep -E 'stamp-compile|stamp-install' /workdir/openwrt/Makefile; then
-          echo "WARNING: sed not applied, toolchain will rebuild"
+        # 精确检查依赖引用 (规则定义行不算残留, 避免误报)
+        echo "--- Makefile toolchain stamp 检查 ---"
+        if grep -nE '\$\(tool(chain|s)?/stamp-(compile|install)\)' Makefile; then
+          echo "WARNING: toolchain stamp dependency still present, toolchain will rebuild"
         else
-          echo "ok: toolchain stamps stripped"
+          echo "ok: toolchain stamps fully stripped, toolchain will be skipped"
         fi
 
+        echo "--- ccache 还原 ---"
         ls -la /workdir/openwrt/.ccache 2>/dev/null | head -5 || echo "(no openwrt/.ccache)"
-        ls -la "$HOME/.ccache" 2>/dev/null | head -5 || echo "(no ~/.ccache)"
-        ccache -s 2>/dev/null | head -10 || true
-
         echo "===== verify done ====="
+
         rm -rf /tmp/cache
         echo "hit=1" >> $GITHUB_OUTPUT
 
-        
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
@@ -215,9 +227,11 @@ jobs:
         cd openwrt
 
         echo "===== ccache 配置 ====="
-        grep -E '^CONFIG_DEVEL|^CONFIG_CCACHE' .config   
-        export CCACHE_DIR=/workdir/openwrt/.ccache       
-        ccache -M 8G                                     
+        # 确认 CONFIG_CCACHE 真的在 defconfig 后的 .config 里 (否则 ccache 不参与编译)
+        grep -E '^CONFIG_DEVEL|^CONFIG_CCACHE' .config
+        # OpenWrt CONFIG_CCACHE 使用 $(TOPDIR)/.ccache, 统计/上限必须指向真实目录
+        export CCACHE_DIR=/workdir/openwrt/.ccache
+        ccache -M 8G
         ccache -z
         
         echo -e "$(nproc) thread compile"
@@ -234,12 +248,12 @@ jobs:
 
     # ============================================================
     # 替代 klever1988/cachewrtbuild@main 的 save(post) 阶段
-    # 打包内容与 utils.js 完全一致: staging_dir/host* + staging_dir/tool* (+ ccache)
-    # 单资产上限 2GiB,因此用 split 分卷后上传到缓存 Release
+    # 打包内容与 utils.js 完全一致: staging_dir/host* + staging_dir/tool* (+ .ccache)
+    # 单资产上限 2GiB, 用 split 分卷后上传到缓存 Release
     # ============================================================
     - name: Save build cache (release)
       if: steps.compile.outputs.status == 'success'
-      # 对齐 save.js: 保存失败仅 warning,不让整个构建失败
+      # 对齐 save.js: 保存失败仅 warning, 不让整个构建失败
       continue-on-error: true
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -249,7 +263,7 @@ jobs:
         CACHE_TAG="${CACHE_TAG:-${CACHE_PREFIX}-$(git log --pretty=tformat:"%h" -n1 tools toolchain)}"
         echo "Saving cache to release: ${CACHE_TAG}"
 
-        # --- 对齐 save.js: clean 时跳过保存;skip_saving 时跳过保存 ---
+        # --- 对齐 save.js: clean 时跳过保存; skip_saving 时跳过保存 ---
         if [ "${{ github.event.inputs.clean_cache }}" = "true" ]; then
           echo "clean=true: skip saving"
           exit 0
@@ -261,9 +275,8 @@ jobs:
 
         rm -rf /tmp/cacheout && mkdir -p /tmp/cacheout
 
-        # --- 诊断: 查看 ccache 缓存真实体积 (判断是否触发 LRU 淘汰) ---
+        # --- 诊断: ccache 缓存真实体积 (判断是否触发 LRU 淘汰抖动) ---
         echo "ccache dir size: $(du -sh /workdir/openwrt/.ccache 2>/dev/null || echo '(not found)')"
-        echo "home ccache dir size: $(du -sh$HOME/.ccache 2>/dev/null || echo '(not found)')"
 
         # --- 打包工具链 (与 utils.js 的 paths 一致: host* + tool*) ---
         if compgen -G "staging_dir/host*" > /dev/null || compgen -G "staging_dir/tool*" > /dev/null; then
@@ -272,39 +285,36 @@ jobs:
           echo "toolchain archive: $(du -h /tmp/cacheout/toolchain.tar.gz | cut -f1)"
         fi
 
-        # --- 打包 ccache (对齐 action 缓存的 openwrt/.ccache,同时兜底 ~/.ccache) ---
+        # --- 打包 ccache (OpenWrt CONFIG_CCACHE 实际使用 openwrt/.ccache) ---
         if [ -d .ccache ]; then
           tar czf /tmp/cacheout/ccache_topdir.tar.gz -C . .ccache
           echo "ccache_topdir archive: $(du -h /tmp/cacheout/ccache_topdir.tar.gz | cut -f1)"
         fi
-        if [ -d $HOME/.ccache ]; then
-          tar czf /tmp/cacheout/ccache_home.tar.gz -C $HOME .ccache
-          echo "ccache_home archive: $(du -h /tmp/cacheout/ccache_home.tar.gz | cut -f1)"
-        fi
 
-        # --- 分卷 (Release 单资产上限 2GiB,留出余量) ---
+        # --- 分卷 (Release 单资产上限 2GiB, 留出余量) ---
         cd /tmp/cacheout
-        for f in toolchain.tar.gz ccache_topdir.tar.gz ccache_home.tar.gz; do
+        for f in toolchain.tar.gz ccache_topdir.tar.gz; do
           if [ -f "$f" ]; then
             split -b 1900M -d "$f" "${f}-"
-            rm -f "$f"   # 删除原始档案,避免 Release 体积翻倍
+            rm -f "$f"   # 删除原始档案, 避免 Release 体积翻倍
           fi
         done
         ls -lh /tmp/cacheout
 
         if [ "${{ steps.restore.outputs.hit }}" = "1" ]; then
-          # 精确命中:工具链 key 未变,只需滚动更新 ccache 资产
-          # 先清掉旧 ccache 分卷,避免残留旧卷污染
-          for a in $(gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-                     --json assets -q '.assets[].name' | grep '^ccache_' || true); do
-            gh release delete-asset "$CACHE_TAG" "$a" -R "$GITHUB_REPOSITORY" -y
-          done
+          # 精确命中: 工具链 key 未变, 只需滚动更新 ccache 资产
+          # 先传新资产、成功后再删旧资产, 中途失败不会弄丢现有缓存
+          OLD_CCACHE_NAMES=$(gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+            --json assets -q '.assets[].name' | grep '^ccache_' | tr '\n' ' ')
           if ls ccache_*.tar.gz-* >/dev/null 2>&1; then
             gh release upload "$CACHE_TAG" -R "$GITHUB_REPOSITORY" ccache_*.tar.gz-*
           fi
+          for a in $OLD_CCACHE_NAMES; do
+            gh release delete-asset "$CACHE_TAG" "$a" -R "$GITHUB_REPOSITORY" -y
+          done
           echo "ccache cache updated (toolchain unchanged)"
         else
-          # 未命中:删除旧 Release 后整体重建(工具链 + ccache)
+          # 未命中: 删除旧 Release 后整体重建 (工具链 + ccache)
           gh release delete "$CACHE_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
           NOTES="build cache: mixkey=w6-mtkw6 toolchain=${CACHE_TAG#*-} date=$(date -u +%FT%TZ)"
           if ls toolchain.tar.gz-* ccache_*.tar.gz-* >/dev/null 2>&1; then
@@ -378,7 +388,7 @@ jobs:
         keep_minimum_runs: 3
 
     # 只清理日期格式的正式发布 Tag (2026.10.11-xxxx),
-    # 缓存 Tag (w6-mtkw6-cache-openwrt-<hash>) 不匹配该模式,不会被误删
+    # 缓存 Tag (w6-mtkw6-cache-openwrt-<hash>) 不匹配该模式, 不会被误删
     - name: Remove old Releases
       uses: dev-drprasad/delete-older-releases@v0.3.0
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
