@@ -214,9 +214,10 @@ jobs:
         set -o pipefail
         cd openwrt
 
-        echo "===== 配置 ccache ====="
-        mkdir -p ~/.ccache
-        ccache -M 5G
+        echo "===== ccache 配置 ====="
+        grep -E '^CONFIG_DEVEL|^CONFIG_CCACHE' .config   
+        export CCACHE_DIR=/workdir/openwrt/.ccache       
+        ccache -M 8G                                     
         ccache -z
         
         echo -e "$(nproc) thread compile"
@@ -228,8 +229,8 @@ jobs:
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-        echo "===== ccache 编译统计 ====="
-        ccache -s
+        echo "===== ccache 编译统计 (真实目录) ====="
+        ccache -s | head -15
 
     # ============================================================
     # 替代 klever1988/cachewrtbuild@main 的 save(post) 阶段
@@ -259,6 +260,10 @@ jobs:
         fi
 
         rm -rf /tmp/cacheout && mkdir -p /tmp/cacheout
+
+        # --- 诊断: 查看 ccache 缓存真实体积 (判断是否触发 LRU 淘汰) ---
+        echo "ccache dir size: $(du -sh /workdir/openwrt/.ccache 2>/dev/null || echo '(not found)')"
+        echo "home ccache dir size: $(du -sh$HOME/.ccache 2>/dev/null || echo '(not found)')"
 
         # --- 打包工具链 (与 utils.js 的 paths 一致: host* + tool*) ---
         if compgen -G "staging_dir/host*" > /dev/null || compgen -G "staging_dir/tool*" > /dev/null; then
@@ -318,6 +323,18 @@ jobs:
           fi
           echo "full cache saved"
         fi
+
+        # ==========================================================
+        # 清理其他 toolchainHash 的旧缓存 Release, 只保留当前这个
+        # ==========================================================
+        echo "===== 清理旧缓存 Release ====="
+        gh release list -R "$GITHUB_REPOSITORY" --json tagName -q '.[].tagName' \
+          | grep "^${CACHE_PREFIX}-" | grep -v "^${CACHE_TAG}$" \
+          | while read -r old_tag; do
+              echo "deleting stale cache release: $old_tag"
+              gh release delete "$old_tag" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+            done
+        echo "===== 清理完毕 ====="
 
     - name: Upload bin directory
       uses: actions/upload-artifact@v4
