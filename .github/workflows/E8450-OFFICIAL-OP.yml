@@ -147,7 +147,7 @@ jobs:
           echo "===== restore verify ====="
           ls -d /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool* 2>/dev/null || echo "(no host*/tool* dirs)"
           du -sh /workdir/openwrt/staging_dir 2>/dev/null || echo "(du failed)"
-          if grep -nE '\$\(tool(chain|s)?/stamp-(compile|install)\)' Makefile; then
+          if grep -E '^(prepare|world):.*\$\(tool(chain|s)?/stamp-' Makefile; then
             echo "WARNING: toolchain stamp dependency still present, toolchain will rebuild"
           else
             echo "ok: toolchain stamps fully stripped, toolchain will be skipped"
