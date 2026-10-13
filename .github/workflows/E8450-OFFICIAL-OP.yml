@@ -69,7 +69,7 @@ jobs:
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
 
-      # 3. 极速克隆源码
+      # 3. 克隆源码
       - name: Clone OpenWrt source
         working-directory: /workdir
         run: |
@@ -79,8 +79,8 @@ jobs:
       # 4. 高效缓存恢复 (Toolchain + ccache, 存储于 GitHub Release, 替代 cachewrtbuild)
       #     key 组成与 cachewrtbuild/utils.js 一致:
       #       ${mixkey}-cache-openwrt-$(git log -n1 tools toolchain 的 hash)
-      #     注: 蓝本为 --depth=1 浅克隆, 路径过滤的 git log 会退化为 HEAD 短 hash,
-      #     与 cachewrtbuild 在同一浅克隆下的失效语义一致: ref 指向新 commit 即换 key
+      #     全量克隆下路径过滤 git log 直接生效 (细粒度失效: 仅 tools/toolchain 变更才换 key);
+      #     兜底: 极端情况下退化为 HEAD 短 hash
       - name: Restore build cache (release)
         id: restore
         env:
@@ -248,7 +248,7 @@ jobs:
           ccache -s
 
       # 11.5 保存构建缓存 (Toolchain + ccache → GitHub Release, 替代 cachewrtbuild save 阶段)
-      #      单资产上限 2GiB, 用 split 分卷后上传; 保存失败仅 warning 不影响构建
+      #      单资产上限 2GiB, split 分卷后上传; 保存失败仅 warning 不影响构建
       - name: Save build cache (release)
         if: steps.compile.outputs.status == 'success'
         continue-on-error: true
@@ -259,75 +259,75 @@ jobs:
           cd /workdir/openwrt
           CACHE_TAG="${CACHE_TAG:-${CACHE_PREFIX}-$(git rev-parse --short HEAD)}"
           echo "Saving cache to release: ${CACHE_TAG}"
-
           if [ "${{ github.event.inputs.clean_cache }}" = "true" ]; then
-            echo "clean_cache=true: skip saving"
-            exit 0
+            echo "clean_cache=true: skip saving"; exit 0
           fi
           if [ "${{ github.event.inputs.skip_saving }}" = "true" ]; then
-            echo "skip_saving=true: skip saving"
-            exit 0
+            echo "skip_saving=true: skip saving"; exit 0
           fi
-
           rm -rf /tmp/cacheout && mkdir -p /tmp/cacheout
-
-          # 诊断: ccache 缓存真实体积 (判断是否触发 LRU 淘汰抖动)
           echo "ccache dir size: $(du -sh /workdir/openwrt/.ccache 2>/dev/null || echo '(not found)')"
-
+          # --- 打包工具链 ---
           if compgen -G "staging_dir/host*" > /dev/null || compgen -G "staging_dir/tool*" > /dev/null; then
             ( cd staging_dir && ls -d host* tool* 2>/dev/null ) > /tmp/tc_list
             tar czf /tmp/cacheout/toolchain.tar.gz -C staging_dir $(cat /tmp/tc_list)
             echo "toolchain archive: $(du -h /tmp/cacheout/toolchain.tar.gz | cut -f1)"
           fi
-
+          # --- 打包 ccache ---
           if [ -d .ccache ]; then
             tar czf /tmp/cacheout/ccache_topdir.tar.gz -C . .ccache
             echo "ccache_topdir archive: $(du -h /tmp/cacheout/ccache_topdir.tar.gz | cut -f1)"
           fi
-
+          # --- 分卷 (固定3位编号, 避免超过100卷时排序异常) ---
           cd /tmp/cacheout
           for f in toolchain.tar.gz ccache_topdir.tar.gz; do
             if [ -f "$f" ]; then
-              split -b 1900M -d "$f" "${f}-"
+              split -b 1900M -d -a 3 "$f" "${f}-"
               rm -f "$f"
             fi
           done
           ls -lh /tmp/cacheout
-
           if [ "${{ steps.restore.outputs.hit }}" = "1" ]; then
-            # 精确命中: 工具链 key 未变, 只滚动更新 ccache 资产 (先传新、后删旧)
+            # 命中: 工具链 key 未变, 只滚动更新 ccache 资产 (先传新、成功后删旧, API 失败不中断)
             OLD_CCACHE_NAMES=$(gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-              --json assets -q '.assets[].name' | grep '^ccache_' | tr '\n' ' ')
-            if ls ccache_*.tar.gz-* >/dev/null 2>&1; then
-              gh release upload "$CACHE_TAG" -R "$GITHUB_REPOSITORY" ccache_*.tar.gz-*
+              --json assets -q '.assets[].name' 2>/dev/null \
+              | grep '^ccache_' | tr '\n' ' ' || true)
+            if ls ccache_topdir.tar.gz-* >/dev/null 2>&1; then
+              NEW_NAMES=$(ls ccache_topdir.tar.gz-* | xargs -n1 basename | tr '\n' ' ')
+              # --clobber 覆盖同名资产; 失败重试 3 次
+              n=1
+              until gh release upload "$CACHE_TAG" -R "$GITHUB_REPOSITORY" --clobber ccache_topdir.tar.gz-*; do
+                [ $n -ge 3 ] && { echo "upload failed after 3 attempts"; exit 1; }
+                echo "attempt $n failed, retrying..."
+                n=$((n+1)); sleep 10
+              done
+              # 只删除不在新集合中的旧分卷 (旧缓存比新的大时多出的卷)
+              for a in $OLD_CCACHE_NAMES; do
+                case " $NEW_NAMES " in
+                  *" $a "*) ;;
+                  *) gh release delete-asset "$CACHE_TAG" "$a" -R "$GITHUB_REPOSITORY" -y || true ;;
+                esac
+              done
             fi
-            for a in $OLD_CCACHE_NAMES; do
-              gh release delete-asset "$CACHE_TAG" "$a" -R "$GITHUB_REPOSITORY" -y
-            done
             echo "ccache cache updated (toolchain unchanged)"
           else
             # 未命中: 删除旧 Release 后整体重建 (工具链 + ccache)
             gh release delete "$CACHE_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
             NOTES="build cache: mixkey=openwrt-e8450-v25.12 commit=${CACHE_TAG##*-} date=$(date -u +%FT%TZ)"
-            if ls toolchain.tar.gz-* ccache_*.tar.gz-* >/dev/null 2>&1; then
+            if ls toolchain.tar.gz-* ccache_topdir.tar.gz-* >/dev/null 2>&1; then
               gh release create "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-                --title "OpenWrt build cache (E8450)" \
-                --notes "$NOTES" \
-                toolchain.tar.gz-* ccache_*.tar.gz-* 2>/dev/null \
+                --title "OpenWrt build cache (E8450)" --notes "$NOTES" \
+                toolchain.tar.gz-* ccache_topdir.tar.gz-* 2>/dev/null \
               || gh release create "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-                --title "OpenWrt build cache (E8450)" \
-                --notes "$NOTES" \
+                --title "OpenWrt build cache (E8450)" --notes "$NOTES" \
                 toolchain.tar.gz-* 2>/dev/null \
               || gh release create "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-                --title "OpenWrt build cache (E8450)" \
-                --notes "$NOTES" \
-                ccache_*.tar.gz-*
+                --title "OpenWrt build cache (E8450)" --notes "$NOTES" \
+                ccache_topdir.tar.gz-*
             fi
             echo "full cache saved"
           fi
-
-          # 清理 7 天未被复用的旧缓存 Release (对齐 @actions/cache 的 7 天淘汰策略)
-          # 保留 7 天窗口是为了切换 branch 输入时, 另一分支的缓存不会被立即误删
+          # --- 清理 7 天未被复用的旧缓存 Release (保留 7 天窗口以支持 branch 切换共存) ---
           echo "===== 清理旧缓存 Release ====="
           gh release list -R "$GITHUB_REPOSITORY" --json tagName,createdAt \
             | jq -r --arg p "${CACHE_PREFIX}-" --arg cur "$CACHE_TAG" \
