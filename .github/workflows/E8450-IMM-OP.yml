@@ -7,7 +7,7 @@ on:
       branch:
         description: "immortalwrt Branch"
         required: true
-        default: "v25.12.0"
+        default: "v25.12.2"
         type: string
       ssh:
         description: "Actions SSH debug"
@@ -25,7 +25,7 @@ on:
 
 # 避免相同分支同时运行时互相覆盖缓存 Release。
 concurrency:
-  group: e8450-${{ github.event.inputs.branch || 'v25.12.0' }}
+  group: e8450-${{ github.event.inputs.branch || 'v25.12.2' }}
   cancel-in-progress: false
 
 permissions:
@@ -33,7 +33,7 @@ permissions:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.0' }}
+  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.2' }}
 
   FEEDS_CONF: E8450/feeds.conf.default
   CONFIG_FILE: E8450/im2512.config
@@ -261,31 +261,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: Patch Kernel Config
-        run: |
-          set -e
-          cd openwrt
-
-          while IFS= read -r -d '' cfg; do
-            echo "Patching $cfg"
-
-            sed -i \
-              -e '/CONFIG_NET_SCH_BPF/d' \
-              -e '/CONFIG_BPF_SYSCALL/d' \
-              -e '/CONFIG_BPF_JIT/d' \
-              -e '/CONFIG_NETKIT/d' \
-              -e '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' \
-              "$cfg"
-
-            cat >> "$cfg" <<'EOF'
-          CONFIG_NET_SCH_BPF=y
-          CONFIG_BPF_SYSCALL=y
-          CONFIG_BPF_JIT=y
-          CONFIG_NETKIT=y
-          CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y
-          EOF
-          done < <(find target/linux/mediatek -name 'config-6*' -print0)
-
+ 
       - name: Download packages
         id: package
         run: |
