@@ -246,105 +246,200 @@ jobs:
         echo "===== ccache 编译统计 (真实目录) ====="
         ccache -s | head -15
 
-    # ============================================================
-    # 替代 klever1988/cachewrtbuild@main 的 save(post) 阶段
-    # 打包内容与 utils.js 完全一致: staging_dir/host* + staging_dir/tool* (+ .ccache)
-    # 单资产上限 2GiB, 用 split 分卷后上传到缓存 Release
-    # ============================================================
     - name: Save build cache (release)
       if: steps.compile.outputs.status == 'success'
-      # 对齐 save.js: 保存失败仅 warning, 不让整个构建失败
       continue-on-error: true
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       run: |
         set -e
         cd /workdir/openwrt
+
         CACHE_TAG="${CACHE_TAG:-${CACHE_PREFIX}-$(git log --pretty=tformat:"%h" -n1 tools toolchain)}"
         echo "Saving cache to release: ${CACHE_TAG}"
 
-        # --- 对齐 save.js: clean 时跳过保存; skip_saving 时跳过保存 ---
+        # ------------------------------------------------------------
+        # Skip saving cache
+        # ------------------------------------------------------------
         if [ "${{ github.event.inputs.clean_cache }}" = "true" ]; then
           echo "clean=true: skip saving"
           exit 0
         fi
+
         if [ "${{ github.event.inputs.skip_saving }}" = "true" ]; then
           echo "skip_saving=true: skip saving"
           exit 0
         fi
 
-        rm -rf /tmp/cacheout && mkdir -p /tmp/cacheout
+        rm -rf /tmp/cacheout
+        mkdir -p /tmp/cacheout
 
-        # --- 诊断: ccache 缓存真实体积 (判断是否触发 LRU 淘汰抖动) ---
+        # ------------------------------------------------------------
+        # Cache size diagnostics
+        # ------------------------------------------------------------
         echo "ccache dir size: $(du -sh /workdir/openwrt/.ccache 2>/dev/null || echo '(not found)')"
 
-        # --- 打包工具链 (与 utils.js 的 paths 一致: host* + tool*) ---
-        if compgen -G "staging_dir/host*" > /dev/null || compgen -G "staging_dir/tool*" > /dev/null; then
-          ( cd staging_dir && ls -d host* tool* 2>/dev/null ) > /tmp/tc_list
-          tar czf /tmp/cacheout/toolchain.tar.gz -C staging_dir $(cat /tmp/tc_list)
+        # ------------------------------------------------------------
+        # Pack toolchain cache
+        # ------------------------------------------------------------
+        if compgen -G "staging_dir/host*" > /dev/null || \
+           compgen -G "staging_dir/tool*" > /dev/null; then
+
+          (
+            cd staging_dir
+            ls -d host* tool* 2>/dev/null
+          ) > /tmp/tc_list
+
+          tar czf /tmp/cacheout/toolchain.tar.gz \
+            -C staging_dir \
+            $(cat /tmp/tc_list)
+
           echo "toolchain archive: $(du -h /tmp/cacheout/toolchain.tar.gz | cut -f1)"
         fi
 
-        # --- 打包 ccache (OpenWrt CONFIG_CCACHE 实际使用 openwrt/.ccache) ---
+        # ------------------------------------------------------------
+        # Pack ccache
+        # OpenWrt CONFIG_CCACHE uses $(TOPDIR)/.ccache
+        # ------------------------------------------------------------
         if [ -d .ccache ]; then
-          tar czf /tmp/cacheout/ccache_topdir.tar.gz -C . .ccache
+          tar czf /tmp/cacheout/ccache_topdir.tar.gz \
+            -C . \
+            .ccache
+
           echo "ccache_topdir archive: $(du -h /tmp/cacheout/ccache_topdir.tar.gz | cut -f1)"
         fi
 
-        # --- 分卷 (Release 单资产上限 2GiB, 留出余量) ---
+        # ------------------------------------------------------------
+        # Split archives
+        # GitHub Release asset limit: keep each part below 2GiB
+        # Use 3 digits suffix: -000 -001 -002 ...
+        # ------------------------------------------------------------
         cd /tmp/cacheout
+
         for f in toolchain.tar.gz ccache_topdir.tar.gz; do
           if [ -f "$f" ]; then
-            split -b 1900M -d "$f" "${f}-"
-            rm -f "$f"   # 删除原始档案, 避免 Release 体积翻倍
+            split -b 1900M -d -a 3 "$f" "${f}-"
+            rm -f "$f"
           fi
         done
+
         ls -lh /tmp/cacheout
 
+        # ============================================================
+        # Existing cache hit:
+        # Only update ccache, keep toolchain unchanged
+        # ============================================================
         if [ "${{ steps.restore.outputs.hit }}" = "1" ]; then
-          # 精确命中: 工具链 key 未变, 只需滚动更新 ccache 资产
-          # 先传新资产、成功后再删旧资产, 中途失败不会弄丢现有缓存
-          OLD_CCACHE_NAMES=$(gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
-            --json assets -q '.assets[].name' | grep '^ccache_' | tr '\n' ' ')
-          if ls ccache_*.tar.gz-* >/dev/null 2>&1; then
-            gh release upload "$CACHE_TAG" -R "$GITHUB_REPOSITORY" ccache_*.tar.gz-*
+
+          OLD_CCACHE_NAMES=$(gh release view "$CACHE_TAG" \
+            -R "$GITHUB_REPOSITORY" \
+            --json assets \
+            -q '.assets[].name' 2>/dev/null \
+            | grep '^ccache_topdir.tar.gz-' \
+            | tr '\n' ' ' || true)
+
+          if ls ccache_topdir.tar.gz-* >/dev/null 2>&1; then
+
+            NEW_NAMES=$(ls ccache_topdir.tar.gz-* \
+              | xargs -n1 basename \
+              | tr '\n' ' ')
+
+            # Upload with overwrite support
+            n=1
+            until gh release upload "$CACHE_TAG" \
+              -R "$GITHUB_REPOSITORY" \
+              --clobber \
+              ccache_topdir.tar.gz-*; do
+
+              if [ $n -ge 3 ]; then
+                echo "upload failed after 3 attempts"
+                exit 1
+              fi
+
+              echo "attempt ${n} failed, retrying..."
+              n=$((n+1))
+              sleep 10
+            done
+
+            # Remove stale ccache shards
+            for a in $OLD_CCACHE_NAMES; do
+              case " $NEW_NAMES " in
+                *" $a "*)
+                  ;;
+                *)
+                  gh release delete-asset "$CACHE_TAG" "$a" \
+                    -R "$GITHUB_REPOSITORY" \
+                    -y || true
+                  ;;
+              esac
+            done
+
           fi
-          for a in $OLD_CCACHE_NAMES; do
-            gh release delete-asset "$CACHE_TAG" "$a" -R "$GITHUB_REPOSITORY" -y
-          done
+
           echo "ccache cache updated (toolchain unchanged)"
+
+        # ============================================================
+        # Cache miss:
+        # Recreate full cache release
+        # ============================================================
         else
-          # 未命中: 删除旧 Release 后整体重建 (工具链 + ccache)
-          gh release delete "$CACHE_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+
+          gh release delete "$CACHE_TAG" \
+            -R "$GITHUB_REPOSITORY" \
+            -y \
+            --cleanup-tag || true
+
           NOTES="build cache: mixkey=w6-mtkw6 toolchain=${CACHE_TAG#*-} date=$(date -u +%FT%TZ)"
-          if ls toolchain.tar.gz-* ccache_*.tar.gz-* >/dev/null 2>&1; then
-            gh release create "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+
+          if ls toolchain.tar.gz-* ccache_topdir.tar.gz-* >/dev/null 2>&1; then
+
+            gh release create "$CACHE_TAG" \
+              -R "$GITHUB_REPOSITORY" \
               --title "OpenWrt build cache (w6-mtkw6)" \
               --notes "$NOTES" \
-              toolchain.tar.gz-* ccache_*.tar.gz-* 2>/dev/null \
-            || gh release create "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+              toolchain.tar.gz-* ccache_topdir.tar.gz-* 2>/dev/null \
+            || gh release create "$CACHE_TAG" \
+              -R "$GITHUB_REPOSITORY" \
               --title "OpenWrt build cache (w6-mtkw6)" \
               --notes "$NOTES" \
               toolchain.tar.gz-* 2>/dev/null \
-            || gh release create "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+            || gh release create "$CACHE_TAG" \
+              -R "$GITHUB_REPOSITORY" \
               --title "OpenWrt build cache (w6-mtkw6)" \
               --notes "$NOTES" \
-              ccache_*.tar.gz-*
+              ccache_topdir.tar.gz-*
+
           fi
+
           echo "full cache saved"
+
         fi
 
-        # ==========================================================
-        # 清理其他 toolchainHash 的旧缓存 Release, 只保留当前这个
-        # ==========================================================
-        echo "===== 清理旧缓存 Release ====="
-        gh release list -R "$GITHUB_REPOSITORY" --json tagName -q '.[].tagName' \
-          | grep "^${CACHE_PREFIX}-" | grep -v "^${CACHE_TAG}$" \
+        # ============================================================
+        # Remove old cache releases
+        # Keep only current toolchain hash cache
+        # ============================================================
+        echo "===== Cleaning old cache releases ====="
+
+        gh release list \
+          -R "$GITHUB_REPOSITORY" \
+          --json tagName \
+          -q '.[].tagName' \
+          | grep "^${CACHE_PREFIX}-" \
+          | grep -v "^${CACHE_TAG}$" \
           | while read -r old_tag; do
+
               echo "deleting stale cache release: $old_tag"
-              gh release delete "$old_tag" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+
+              gh release delete "$old_tag" \
+                -R "$GITHUB_REPOSITORY" \
+                -y \
+                --cleanup-tag || true
+
             done
-        echo "===== 清理完毕 ====="
+
+        echo "===== Cache cleanup complete ====="
 
     - name: Upload bin directory
       uses: actions/upload-artifact@v4
