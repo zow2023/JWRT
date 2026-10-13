@@ -7,7 +7,7 @@ on:
       branch:
         description: "immortalwrt Branch"
         required: true
-        default: "v25.12.2"
+        default: "v25.12.0"
         type: string
       ssh:
         description: "Actions SSH debug"
@@ -25,7 +25,7 @@ on:
 
 # 避免相同分支同时运行时互相覆盖缓存 Release。
 concurrency:
-  group: e8450-${{ github.event.inputs.branch || 'v25.12.2' }}
+  group: e8450-${{ github.event.inputs.branch || 'v25.12.0' }}
   cancel-in-progress: false
 
 permissions:
@@ -33,7 +33,7 @@ permissions:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.2' }}
+  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.0' }}
 
   FEEDS_CONF: E8450/feeds.conf.default
   CONFIG_FILE: E8450/im2512.config
@@ -51,7 +51,7 @@ env:
 
   # ===== 缓存 Release 相关 (对齐 cachewrtbuild: mixkey + "-cache-openwrt") =====
   # 按分支隔离缓存，切换分支时新旧缓存可共存 7 天后自动清理。
-  CACHE_PREFIX: e8450-imm-${{ github.event.inputs.branch || 'v25.12.2' }}-cache-openwrt
+  CACHE_PREFIX: e8450-imm-${{ github.event.inputs.branch || 'v25.12.0' }}-cache-openwrt
 
 jobs:
   build:
@@ -166,8 +166,10 @@ jobs:
             exit 0
           fi
 
+          # 打包时用 -C staging_dir (归档顶层为裸的 host*/tool*)，
+          # 因此必须解压到 staging_dir 本身，而不是 openwrt 根目录。
           mkdir -p /workdir/openwrt/staging_dir
-          cat /tmp/cache/toolchain.tar.zst-* | tar -I zstd -xf - -C /workdir/openwrt
+          cat /tmp/cache/toolchain.tar.zst-* | tar -I zstd -xf - -C /workdir/openwrt/staging_dir
           echo "Toolchain cache restored"
 
           if ls /tmp/cache/ccache_topdir.tar.zst-* >/dev/null 2>&1; then
@@ -183,7 +185,9 @@ jobs:
 
           if ! ls -d /workdir/openwrt/staging_dir/tool* >/dev/null 2>&1; then
             echo "staging_dir/tool* NOT restored, treating as cache miss, will build toolchain from scratch"
+            # 同时清掉可能误落在 openwrt 根目录的 host*/tool* 残留
             rm -rf /workdir/openwrt/staging_dir /tmp/cache
+            rm -rf /workdir/openwrt/host* /workdir/openwrt/tool*
             exit 0
           fi
 
@@ -257,7 +261,31 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
- 
+      - name: Patch Kernel Config
+        run: |
+          set -e
+          cd openwrt
+
+          while IFS= read -r -d '' cfg; do
+            echo "Patching $cfg"
+
+            sed -i \
+              -e '/CONFIG_NET_SCH_BPF/d' \
+              -e '/CONFIG_BPF_SYSCALL/d' \
+              -e '/CONFIG_BPF_JIT/d' \
+              -e '/CONFIG_NETKIT/d' \
+              -e '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' \
+              "$cfg"
+
+            cat >> "$cfg" <<'EOF'
+          CONFIG_NET_SCH_BPF=y
+          CONFIG_BPF_SYSCALL=y
+          CONFIG_BPF_JIT=y
+          CONFIG_NETKIT=y
+          CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y
+          EOF
+          done < <(find target/linux/mediatek -name 'config-6*' -print0)
+
       - name: Download packages
         id: package
         run: |
