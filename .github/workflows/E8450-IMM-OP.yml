@@ -7,17 +7,25 @@ on:
       branch:
         description: "immortalwrt Branch"
         required: true
-        default: "v25.12.0"
+        default: "v25.12.2"
         type: string
       ssh:
         description: "Actions SSH debug"
         required: false
         default: false
         type: boolean
+      clean_cache:
+        description: "Clean build cache (delete cache releases, skip restore/save)"
+        required: false
+        default: 'false'
+      skip_saving:
+        description: "Skip saving build cache"
+        required: false
+        default: 'false'
 
-# 避免相同分支同时运行时互相覆盖 Toolchain Release。
+# 避免相同分支同时运行时互相覆盖缓存 Release。
 concurrency:
-  group: e8450-${{ github.event.inputs.branch || 'v25.12.0' }}
+  group: e8450-${{ github.event.inputs.branch || 'v25.12.2' }}
   cancel-in-progress: false
 
 permissions:
@@ -25,7 +33,7 @@ permissions:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.0' }}
+  REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.2' }}
 
   FEEDS_CONF: E8450/feeds.conf.default
   CONFIG_FILE: E8450/im2512.config
@@ -36,14 +44,19 @@ env:
   UPLOAD_FIRMWARE: "true"
   UPLOAD_RELEASE: "false"
 
-  # 与 actions/cache 的缓存路径保持一致。
+  # ccache 命令与 OpenWrt 的 CONFIG_CCACHE_DIR 保持一致。
   CCACHE_DIR: /workdir/openwrt/.ccache
 
   TZ: Asia/Shanghai
 
+  # ===== 缓存 Release 相关 (对齐 cachewrtbuild: mixkey + "-cache-openwrt") =====
+  # 按分支隔离缓存，切换分支时新旧缓存可共存 7 天后自动清理。
+  CACHE_PREFIX: e8450-imm-${{ github.event.inputs.branch || 'v25.12.2' }}-cache-openwrt
+
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 360
 
     steps:
       - name: Checkout
@@ -90,24 +103,104 @@ jobs:
           sudo mkdir -p /workdir
           sudo chown "$USER":"$(id -gn)" /workdir
 
+      # 全量克隆是必需的：缓存键依赖 git log 对 tools/toolchain 的路径过滤，
+      # 浅克隆下路径过滤会退化为 HEAD 短 hash，导致缓存每次失效。
       - name: Clone source code
         working-directory: /workdir
         run: |
           set -e
           df -hT "$PWD"
-          git clone --depth 1 --single-branch -b "$REPO_BRANCH" "$REPO_URL" openwrt
+          git clone --single-branch -b "$REPO_BRANCH" "$REPO_URL" openwrt
           ln -sfn /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
           mkdir -p /workdir/openwrt/.ccache /workdir/openwrt/dl
 
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: /workdir/openwrt/.ccache
-          # 每次运行使用新 key，否则精确命中后 actions/cache 不会保存更新后的 ccache。
-          key: ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          # 同分支回退到最新的历史缓存，普通软件包配置变化仍可复用 ccache。
-          restore-keys: |
-            ccache-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-
+      # 缓存恢复 (Toolchain + ccache + dl, 存储于 GitHub Release, 替代 cachewrtbuild)
+      # key 组成与 cachewrtbuild/utils.js 一致:
+      #   ${mixkey}-cache-openwrt-$(git log -n1 tools toolchain 的短 hash)
+      # 全量克隆下路径过滤 git log 直接生效 (细粒度失效: 仅 tools/toolchain 变更才换 key);
+      # 兜底: 极端情况下退化为 HEAD 短 hash
+      - name: Restore build cache (release)
+        id: restore
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLEAN_CACHE: ${{ github.event.inputs.clean_cache }}
+        run: |
+          set +e
+          cd /workdir/openwrt
+
+          TOOLCHAIN_HASH="$(git log --pretty=tformat:"%h" -n1 tools toolchain)"
+          [ -z "$TOOLCHAIN_HASH" ] && TOOLCHAIN_HASH="$(git rev-parse --short HEAD)"
+          CACHE_TAG="${CACHE_PREFIX}-${TOOLCHAIN_HASH}"
+          echo "CACHE_TAG=${CACHE_TAG}" >> "$GITHUB_ENV"
+          echo "Cache key (release tag): ${CACHE_TAG}"
+
+          if [ "$CLEAN_CACHE" = "true" ]; then
+            echo "clean_cache=true: delete all ${CACHE_PREFIX}-* releases, skip restore/save"
+            gh release list -R "$GITHUB_REPOSITORY" --json tagName --jq '.[].tagName' 2>/dev/null \
+              | grep "^${CACHE_PREFIX}-" \
+              | while IFS= read -r tag; do
+                  echo "deleting cache release: $tag"
+                  gh release delete "$tag" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+                done
+            exit 0
+          fi
+
+          mkdir -p /tmp/cache
+
+          if ! gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Cache miss: release ${CACHE_TAG} not found, will build from scratch"
+            exit 0
+          fi
+
+          if ! gh release download "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+               -D /tmp/cache \
+               -p 'toolchain.tar.zst-*' -p 'ccache_topdir.tar.zst-*' -p 'dl.tar.zst-*'; then
+            echo "Cache miss: download failed, will build from scratch"
+            rm -rf /tmp/cache
+            exit 0
+          fi
+
+          if ! ls /tmp/cache/toolchain.tar.zst-* >/dev/null 2>&1; then
+            echo "Toolchain asset missing, treating as cache miss"
+            rm -rf /tmp/cache
+            exit 0
+          fi
+
+          mkdir -p /workdir/openwrt/staging_dir
+          cat /tmp/cache/toolchain.tar.zst-* | tar -I zstd -xf - -C /workdir/openwrt
+          echo "Toolchain cache restored"
+
+          if ls /tmp/cache/ccache_topdir.tar.zst-* >/dev/null 2>&1; then
+            cat /tmp/cache/ccache_topdir.tar.zst-* | tar -I zstd -xf - -C /workdir/openwrt
+            echo "ccache (openwrt/.ccache) restored"
+          fi
+
+          # dl 恢复到 openwrt/dl, 供后续 make download 复用
+          if ls /tmp/cache/dl.tar.zst-* >/dev/null 2>&1; then
+            cat /tmp/cache/dl.tar.zst-* | tar -I zstd -xf - -C /workdir/openwrt
+            echo "dl (openwrt/dl) restored"
+          fi
+
+          if ! ls -d /workdir/openwrt/staging_dir/tool* >/dev/null 2>&1; then
+            echo "staging_dir/tool* NOT restored, treating as cache miss, will build toolchain from scratch"
+            rm -rf /workdir/openwrt/staging_dir /tmp/cache
+            exit 0
+          fi
+
+          # 与 cachewrtbuild/fetch.js 一致: 命中后 sed 跳过工具链编译
+          sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
+          sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
+          echo "Toolchain building skipped"
+
+          # 唯一保留的校验: 确认 stamp 依赖确已被剥离
+          if grep -E '^(prepare|world):.*\$\(tool(chain|s)?/stamp-' Makefile; then
+            echo "WARNING: toolchain stamp dependency still present, toolchain will rebuild"
+          else
+            echo "ok: toolchain stamps fully stripped, toolchain will be skipped"
+          fi
+
+          rm -rf /tmp/cache
+          echo "hit=1" >> "$GITHUB_OUTPUT"
 
       - name: Load custom feeds
         run: |
@@ -121,18 +214,16 @@ jobs:
           cd openwrt
           "$GITHUB_WORKSPACE/$DIY_P1_SH"
 
-      - name: Update feeds
+      - name: Update & Install feeds
         run: |
+          set -e
           cd openwrt
           ./scripts/feeds update -a
-
-      - name: Install feeds
-        run: |
-          cd openwrt
           ./scripts/feeds install -a
 
       - name: Fix Rust build
         run: |
+          set -e
           cd openwrt
           RUST_MAKEFILE="feeds/packages/lang/rust/Makefile"
 
@@ -166,62 +257,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: Patch Kernel Config
-        run: |
-          set -e
-          cd openwrt
-
-          while IFS= read -r -d '' cfg; do
-            echo "Patching $cfg"
-
-            sed -i \
-              -e '/CONFIG_NET_SCH_BPF/d' \
-              -e '/CONFIG_BPF_SYSCALL/d' \
-              -e '/CONFIG_BPF_JIT/d' \
-              -e '/CONFIG_NETKIT/d' \
-              -e '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' \
-              "$cfg"
-
-            cat >> "$cfg" <<'EOF'
-          CONFIG_NET_SCH_BPF=y
-          CONFIG_BPF_SYSCALL=y
-          CONFIG_BPF_JIT=y
-          CONFIG_NETKIT=y
-          CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y
-          EOF
-          done < <(find target/linux/mediatek -name 'config-6*' -print0)
-
-      # 对源码和 feeds 的当前提交生成下载缓存指纹；版本变化时产生新缓存，避免旧归档永久不更新。
-      - name: Prepare download cache key
-        working-directory: /workdir/openwrt
-        run: |
-          set -euo pipefail
-
-          DOWNLOAD_SOURCE_HASH="$(
-            {
-              printf 'openwrt %s\n' "$(git rev-parse HEAD)"
-              while IFS= read -r -d '' git_entry; do
-                repo="${git_entry%/.git}"
-                if [[ -d "$repo" && -e "$repo/.git" ]]; then
-                  commit="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf unknown)"
-                  printf '%s %s\n' "${repo#/workdir/openwrt/}" "$commit"
-                fi
-              done < <(find feeds package -name .git -print0)
-            } | LC_ALL=C sort | sha256sum | cut -c1-12
-          )"
-
-          echo "DOWNLOAD_SOURCE_HASH=${DOWNLOAD_SOURCE_HASH}" >> "$GITHUB_ENV"
-          echo "Download source hash: ${DOWNLOAD_SOURCE_HASH}"
-
-      # 缓存 make download 获取的源码归档，减少每次运行的重复网络下载。
-      - name: Cache OpenWrt download sources
-        uses: actions/cache@v4
-        with:
-          path: /workdir/openwrt/dl
-          key: dl-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('E8450/im2512.config', 'E8450/feeds.conf.default', 'E8450/diy-part-1.sh', 'E8450/diy-part-4.sh') }}
-          restore-keys: |
-            dl-${{ runner.os }}-e8450-${{ github.event.inputs.branch || 'v25.12.0' }}-
-
+ 
       - name: Download packages
         id: package
         run: |
@@ -230,7 +266,7 @@ jobs:
 
           make defconfig
 
-          # 确保 OpenWrt 使用 ccache，并与工作流缓存目录一致。
+          # 确保 OpenWrt 使用 ccache，并与缓存恢复/保存路径一致 ($(TOPDIR)/.ccache)。
           sed -i \
             -e '/^CONFIG_CCACHE=/d' \
             -e '/^CONFIG_CCACHE_DIR=/d' \
@@ -244,96 +280,9 @@ jobs:
           make defconfig
           make download -j"$(nproc)"
 
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
-
-      # 只根据工具链源码和真正影响工具链的 .config 项生成缓存标签。
-      # 放在 make defconfig 与软件包下载之后，保证读取的是规范化后的最终配置。
-      - name: Prepare Toolchain cache key
-        working-directory: /workdir/openwrt
-        run: |
-          set -euo pipefail
-
-          SAFE_BRANCH="$(printf '%s' "$REPO_BRANCH" | sed -E 's/[^A-Za-z0-9._-]+/-/g' | cut -c1-24)"
-
-          # 使用 tools/ 与 toolchain/ 的 Git tree 对象哈希，避免普通源码提交
-          # 或 HomeProxy、sing-box 等软件包选择变化导致工具链缓存失效。
-          TOOLCHAIN_SOURCE_HASH="$(
-            {
-              git rev-parse HEAD:tools
-              git rev-parse HEAD:toolchain
-            } | sha256sum | cut -c1-12
-          )"
-
-          # 只纳入架构、ABI、C 库、GCC/Binutils、BPF/LLVM 等工具链相关选项。
-          # 普通 CONFIG_PACKAGE_* 与 CONFIG_CCACHE_DIR 不参与此哈希。
-          TOOLCHAIN_CONFIG_HASH="$(
-            grep -E '^(# )?CONFIG_(ARCH|ARCH_64BIT|BIG_ENDIAN|aarch64|arm|mipsel|TARGET_BOARD|TARGET_SUBTARGET|TARGET_mediatek|TARGET_mediatek_mt7622|TARGET_ARCH_PACKAGES|TARGET_OPTIMIZATION|TARGET_CPU|CPU_TYPE|CPU_SUBTYPE|SOFT_FLOAT|USE_MIPS16|TOOLCHAINOPTS|EXTERNAL_TOOLCHAIN|NATIVE_TOOLCHAIN|EXTERNAL_GCC_VERSION|EXTERNAL_TOOLCHAIN_LIBC_USE_(GLIBC|MUSL)|TOOLCHAIN_(LIBC|PREFIX|ROOT|INC_PATH|LIB_PATH|BIN_PATH)|EXTRA_TARGET_ARCH(_NAME|_OPTS)?|MIPS64_ABI_(N64|N32|O32)|LIBC_USE_(GLIBC|MUSL)|USE_(GLIBC|MUSL)|MUSL_DISABLE_CRYPT_SIZE_HACK|GCC_USE_VERSION_[0-9]+|GCC_USE_GRAPHITE|EXTRA_GCC_CONFIG_OPTIONS|GCC_DEFAULT_(PIE|SSP)|SJLJ_EXCEPTIONS|INSTALL_(GFORTRAN|GCCGO)|BINUTILS_USE_VERSION_[0-9_]+|EXTRA_BINUTILS_CONFIG_OPTIONS|BPF_TOOLCHAIN(_NONE|_PREBUILT|_BUILD_LLVM|_HOST|_HOST_PATH)?|HAS_PREBUILT_LLVM_TOOLCHAIN|USE_LLVM_(HOST|BUILD|PREBUILT)|DWARVES|GDB(_PYTHON)?|NASM)(=.*| is not set)$' .config \
-              | LC_ALL=C sort \
-              | sha256sum \
-              | cut -c1-12
-          )"
-
-          # v2 用于和旧版“整份配置文件哈希”的缓存标签隔离。
-          TOOLCHAIN_TAG="toolchain-e8450-v2-${SAFE_BRANCH}-${TOOLCHAIN_SOURCE_HASH}-${TOOLCHAIN_CONFIG_HASH}"
-
-          echo "SAFE_BRANCH=${SAFE_BRANCH}" >> "$GITHUB_ENV"
-          echo "TOOLCHAIN_SOURCE_HASH=${TOOLCHAIN_SOURCE_HASH}" >> "$GITHUB_ENV"
-          echo "TOOLCHAIN_CONFIG_HASH=${TOOLCHAIN_CONFIG_HASH}" >> "$GITHUB_ENV"
-          echo "TOOLCHAIN_TAG=${TOOLCHAIN_TAG}" >> "$GITHUB_ENV"
-
-          echo "Toolchain source hash: ${TOOLCHAIN_SOURCE_HASH}"
-          echo "Toolchain config hash: ${TOOLCHAIN_CONFIG_HASH}"
-          echo "Toolchain cache tag: ${TOOLCHAIN_TAG}"
-
-      - name: Restore Toolchain from Release
-        id: restore-toolchain
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          DOWNLOAD_DIR="/tmp/toolchain-cache"
-          mkdir -p "$DOWNLOAD_DIR"
-
-          echo "Checking Toolchain Release: ${TOOLCHAIN_TAG}"
-
-          if ! gh release download "$TOOLCHAIN_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "toolchain.tar.zst" \
-            --dir "$DOWNLOAD_DIR"; then
-            echo "No usable Toolchain Release found; building Toolchain from source."
-            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          if ! tar -I zstd -xf "$DOWNLOAD_DIR/toolchain.tar.zst" -C /workdir/openwrt; then
-            echo "Toolchain archive could not be extracted; rebuilding it."
-            rm -rf /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool*
-            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          # 确认归档里确实有 cachewrtbuild 风格的目录。
-          shopt -s nullglob
-          HOST_PATHS=(/workdir/openwrt/staging_dir/host*)
-          TOOL_PATHS=(/workdir/openwrt/staging_dir/tool*)
-
-          if (( ${#HOST_PATHS[@]} == 0 || ${#TOOL_PATHS[@]} == 0 )); then
-            echo "Toolchain archive is missing staging_dir/host* or staging_dir/tool*."
-            rm -rf /workdir/openwrt/staging_dir/host* /workdir/openwrt/staging_dir/tool*
-            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          # 与 cachewrtbuild 的跳过方式保持一致：缓存确认恢复成功后，
-          # 从顶层 Makefile 移除工具链 stamp-compile/stamp-install 依赖。
-          cd /workdir/openwrt
-          sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
-          sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
-
-          echo "TOOLCHAIN_EXISTS=true" >> "$GITHUB_ENV"
-          echo "Toolchain cache restored and toolchain build dependencies skipped."
+          # 清理小于 1KB 的坏文件时排除 dl/go-mod-cache (锁文件/元数据小于 1KB)。
+          find dl -path dl/go-mod-cache -prune -o -size -1024c -exec ls -l {} \;
+          find dl -path dl/go-mod-cache -prune -o -size -1024c -exec rm -f {} \;
 
       - name: Compile the firmware
         id: compile
@@ -342,13 +291,18 @@ jobs:
           set -o pipefail
           cd openwrt
 
-          echo "Configuring ccache..."
-          mkdir -p "$CCACHE_DIR"
-          ccache -M 5G
+          echo "===== ccache 配置 ====="
+          # 确认 CONFIG_CCACHE 在 defconfig 后仍存在 (否则 ccache 不参与编译)
+          grep -E '^CONFIG_DEVEL|^CONFIG_CCACHE' .config || echo "(CONFIG_CCACHE not found in .config)"
+          # OpenWrt CONFIG_CCACHE 实际使用 $(TOPDIR)/.ccache, 统计/上限必须指向真实目录
+          export CCACHE_DIR=/workdir/openwrt/.ccache
+          ccache -M 8G
           ccache -z
 
-          echo "Compiling with $(nproc) threads..."
-          make -j"$(nproc)" || make -j1 || make -j1 V=s
+          export FORCE_UNSAFE_CONFIGURE=1
+
+          echo "Compiling with $(($(nproc)+1)) threads..."
+          make -j$(($(nproc)+1)) || make -j1 V=s
 
           echo "status=success" >> "$GITHUB_OUTPUT"
 
@@ -361,40 +315,117 @@ jobs:
 
           echo "FILE_DATE=_$(date +'%Y%m%d%H%M')" >> "$GITHUB_ENV"
 
-          echo "ccache statistics:"
+          echo "===== ccache 编译统计 ====="
           ccache -s
 
-      - name: Save Toolchain to Release
-        if: ${{ steps.compile.outputs.status == 'success' && env.TOOLCHAIN_EXISTS != 'true' && !cancelled() }}
+      # 保存构建缓存 (Toolchain + ccache + dl → GitHub Release, 替代 cachewrtbuild save 阶段)
+      # 单资产上限 2GiB, split 分卷后上传; 保存失败不影响构建产物 (continue-on-error)。
+      - name: Save build cache (release)
+        if: steps.compile.outputs.status == 'success'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLEAN_CACHE: ${{ github.event.inputs.clean_cache }}
+          SKIP_SAVING: ${{ github.event.inputs.skip_saving }}
         run: |
-          set -euo pipefail
+          set -e
           cd /workdir/openwrt
 
+          if [ "$CLEAN_CACHE" = "true" ]; then
+            echo "clean_cache=true: skip saving"; exit 0
+          fi
+          if [ "$SKIP_SAVING" = "true" ]; then
+            echo "skip_saving=true: skip saving"; exit 0
+          fi
+
+          rm -rf /tmp/cacheout && mkdir -p /tmp/cacheout
           shopt -s nullglob
-          CACHE_PATHS=(staging_dir/host* staging_dir/tool*)
 
-          if (( ${#CACHE_PATHS[@]} == 0 )); then
-            echo "No staging_dir/host* or staging_dir/tool* paths found; cannot save Toolchain cache."
-            exit 1
+          # --- 打包 ccache (zstd 多线程) ---
+          echo "ccache dir size: $(du -sh /workdir/openwrt/.ccache 2>/dev/null || echo '(not found)')"
+          if [ -d .ccache ]; then
+            tar -I 'zstd -T0 -1' -cf /tmp/cacheout/ccache_topdir.tar.zst -C . .ccache
+            echo "ccache archive: $(du -h /tmp/cacheout/ccache_topdir.tar.zst | cut -f1)"
           fi
 
-          echo "Packing Toolchain cache paths: ${CACHE_PATHS[*]}"
-          tar -I 'zstd -3' -cf toolchain.tar.zst "${CACHE_PATHS[@]}"
+          # --- 打包 dl (源码包本身已是压缩格式, 低级别 zstd 快速打包;
+          #     排除 go-mod-cache, 防止同版本号 re-tag 依赖使用过期模块) ---
+          if [ -d dl ]; then
+            tar -I 'zstd -T0 -1' -cf /tmp/cacheout/dl.tar.zst \
+              --exclude='dl/go-mod-cache' -C . dl
+            echo "dl archive: $(du -h /tmp/cacheout/dl.tar.zst | cut -f1)"
+          fi
 
-          if gh release view "$TOOLCHAIN_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release exists; replacing its Toolchain asset."
-            gh release upload "$TOOLCHAIN_TAG" toolchain.tar.zst \
-              --repo "$GITHUB_REPOSITORY" \
-              --clobber
+          # --- 仅未命中时重新打包工具链 (命中时 Release 里已有, 不动) ---
+          if [ "${{ steps.restore.outputs.hit }}" != "1" ]; then
+            ( cd staging_dir && ls -d host* tool* 2>/dev/null ) > /tmp/tc_list
+            tar -I 'zstd -T0 -3' -cf /tmp/cacheout/toolchain.tar.zst -C staging_dir $(cat /tmp/tc_list)
+            echo "toolchain archive: $(du -h /tmp/cacheout/toolchain.tar.zst | cut -f1)"
+          fi
+
+          # --- 分卷 (单资产 2GiB 上限, 固定 3 位编号, 避免超过 100 卷时排序异常) ---
+          cd /tmp/cacheout
+          for f in *.tar.zst; do
+            split -b 1900M -d -a 3 "$f" "${f}-"
+            rm -f "$f"
+          done
+          ls -lh /tmp/cacheout
+
+          if [ "${{ steps.restore.outputs.hit }}" = "1" ]; then
+            # 命中: 工具链资产不动, 只滚动更新 ccache 与 dl 资产 (先传新, 成功后删旧)
+            OLD_ASSETS="$(gh release view "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+              --json assets -q '.assets[].name' 2>/dev/null || true)"
+            CCACHE_VOLS=(ccache_topdir.tar.zst-*)
+            DL_VOLS=(dl.tar.zst-*)
+            if [ ${#CCACHE_VOLS[@]} -gt 0 ] || [ ${#DL_VOLS[@]} -gt 0 ]; then
+              UPLOAD_ARGS=("${CCACHE_VOLS[@]}" "${DL_VOLS[@]}")
+              n=1
+              until gh release upload "$CACHE_TAG" -R "$GITHUB_REPOSITORY" --clobber "${UPLOAD_ARGS[@]}"; do
+                [ $n -ge 3 ] && { echo "upload failed after 3 attempts"; exit 1; }
+                echo "attempt $n failed, retrying..."
+                n=$((n+1)); sleep 10
+              done
+              # 只删除不在新集合中的旧分卷 (旧缓存比新的大时多出的卷)
+              NEW_NAMES=" $(printf '%s ' "${UPLOAD_ARGS[@]}")"
+              for a in $OLD_ASSETS; do
+                case "$a" in
+                  ccache_topdir.tar.zst-*|dl.tar.zst-*)
+                    case "$NEW_NAMES" in
+                      *" $a "*) ;;
+                      *) gh release delete-asset "$CACHE_TAG" "$a" -R "$GITHUB_REPOSITORY" -y || true ;;
+                    esac
+                    ;;
+                esac
+              done
+            fi
+            echo "ccache + dl cache updated (toolchain unchanged)"
           else
-            echo "Creating Toolchain Release."
-            gh release create "$TOOLCHAIN_TAG" toolchain.tar.zst \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "Toolchain Cache (${TOOLCHAIN_TAG})" \
-              --notes "OpenWrt Toolchain cache (staging_dir/host* and staging_dir/tool*)."
+            # 未命中: 删除旧 Release 后, 工具链 + ccache + dl 一次性重建
+            gh release delete "$CACHE_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+            ASSETS=(toolchain.tar.zst-* ccache_topdir.tar.zst-* dl.tar.zst-*)
+            if [ ${#ASSETS[@]} -gt 0 ]; then
+              NOTES="build cache: mixkey=${CACHE_PREFIX} commit=${CACHE_TAG##*-} date=$(date -u +%FT%TZ)"
+              gh release create "$CACHE_TAG" -R "$GITHUB_REPOSITORY" \
+                --title "OpenWrt build cache (E8450 immortalwrt)" --notes "$NOTES" \
+                "${ASSETS[@]}" \
+                || echo "WARNING: cache release create failed (non-fatal)"
+            fi
+            echo "full cache saved (toolchain + ccache + dl)"
           fi
+
+          # --- 清理 7 天未被复用的旧缓存 Release (保留 7 天窗口以支持 branch 切换共存) ---
+          echo "===== 清理旧缓存 Release ====="
+          gh release list -R "$GITHUB_REPOSITORY" --json tagName,createdAt \
+            | jq -r --arg p "${CACHE_PREFIX}-" --arg cur "$CACHE_TAG" \
+                '.[] | select(.tagName | startswith($p)) | select(.tagName != $cur) | [.createdAt, .tagName] | @tsv' \
+            | while IFS=$'\t' read -r created old_tag; do
+                age=$(( ( $(date +%s) - $(date -d "$created" +%s) ) / 86400 ))
+                if [ "$age" -ge 7 ]; then
+                  echo "deleting stale cache release (${age}d old): $old_tag"
+                  gh release delete "$old_tag" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+                fi
+              done
+          echo "===== 清理完毕 ====="
 
       - name: Upload bin directory
         uses: actions/upload-artifact@v4
@@ -432,6 +463,15 @@ jobs:
           name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
+      # 编译失败时自动保存日志
+      - name: Upload compile logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: openwrt-build-logs
+          path: |
+            openwrt/logs/
+            openwrt/.config
 
       - name: Delete workflow runs
         uses: GitRML/delete-workflow-runs@main
