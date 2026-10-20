@@ -26,7 +26,7 @@ env:
   REPO_URL: https://github.com/openwrt/openwrt
   REPO_BRANCH: ${{ github.event.inputs.branch || 'v25.12.6' }}
   FEEDS_CONF: W6/feeds.conf.default
-  CONFIG_FILE: W6/mtkw6.config
+  CONFIG_FILE: W6/of25126.config
   DIY_P1_SH: W6/diy-part1.sh
   DIY_P2_SH: W6/diy-part3.sh
   UPLOAD_BIN_DIR: false
