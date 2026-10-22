@@ -244,8 +244,20 @@ jobs:
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-          echo "===== ccache 编译统计 ====="
-          ccache -s
+      - name: ccache diagnostics
+        if: always()
+        run: |
+          export CCACHE_DIR=/workdir/openwrt/.ccache
+          echo "===== 构建时真实生效的 CCACHE 配置 (来自 rules.mk) ====="
+          cd /workdir/openwrt
+          make -pn 2>/dev/null | grep -E '^export CCACHE' || echo "(none)"
+          echo "===== 当前 shell 环境 CCACHE 配置 (仅供参考) ====="
+          ccache -p | grep -Ei 'sloppiness|compiler_check|base_dir|hash_dir|cache_dir'
+          echo "===== 详细统计 ====="
+          ccache -sv || ccache -s
+          echo "===== miss 原因聚类 (如启用 CCACHE_LOGFILE) ====="
+          grep -oE 'result: miss [^ ]*' /tmp/ccache.log 2>/dev/null | sort | uniq -c | sort -rn | head -20 || echo "(no ccache.log; enable CCACHE_LOGFILE in compile step)"
+    
 
       # 11.5 保存构建缓存 (Toolchain + ccache → GitHub Release, 替代 cachewrtbuild save 阶段)
       #      单资产上限 2GiB, split 分卷后上传; 保存失败仅 warning 不影响构建
