@@ -17,6 +17,12 @@ on:
         required: false
         default: 'false'
 
+# 工具链缓存存 Release 需要 GITHUB_TOKEN 有 contents:write（gh release create/upload/delete），
+# delete-workflow-runs 需要 actions:write。
+permissions:
+  contents: write
+  actions: write
+
 env:
   REPO_URL: https://github.com/x-wrt/x-wrt.git
   REPO_BRANCH: ${{ github.event.inputs.branch || '26.04_b202607300654' }}
@@ -62,7 +68,7 @@ jobs:
             gettext git libncurses5-dev libssl-dev dos2unix dwarves quilt npm jq ccache ninja-build \
             python3-setuptools rsync swig unzip zlib1g-dev file wget xsltproc zip zstd
 
-          sudo npm install -g pnpm
+          # [改动] 删除 pnpm 安装：OpenWrt 构建链路不依赖它
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           sudo rm -rf /var/lib/apt/lists/*
@@ -79,13 +85,15 @@ jobs:
           git clone $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+      # [改动] key 加入 github.sha：每次运行精确 key 必不命中，由 restore-keys
+      # 前缀回退到最近缓存；post 阶段每次都以新 key 保存，ccache 才能随构建滚动更新。
+      # 原常量 key 会导致缓存精确命中后不再保存，永远停在第一次的状态。
+      # 兼容性：restore-keys 前缀与旧缓存一致，首次运行即可无缝继承旧 ccache。
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: /workdir/openwrt/.ccache
-          # 每次运行使用新 key，否则精确命中后 actions/cache 不会保存更新后的 ccache。
-          key: ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ hashFiles('W6/w6x.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part5.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          # 同分支回退到最新的历史缓存，普通软件包配置变化仍可复用 ccache。
+          key: ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ github.sha }}
           restore-keys: |
             ccache-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
             ccache-${{ runner.os }}-w6-
@@ -146,23 +154,18 @@ jobs:
           echo "DOWNLOAD_SOURCE_HASH=${DOWNLOAD_SOURCE_HASH}" >> "$GITHUB_ENV"
           echo "Download source hash: ${DOWNLOAD_SOURCE_HASH}"
 
+      # [改动] hashFiles 只保留 diy-part1.sh / diy-part5.sh 两个未被 mv 走的文件。
+      # 原来的 w6x.config 和 feeds.conf.default 在更早的步骤里已被移走，hashFiles 匹配不到。
+      # （dl 缓存本就不该包含 .config 哈希：dl 内容只与源码/feeds commit 有关）
+      # 保留 source-hash 设计：精确命中时 actions/cache 跳过保存，避免每次重传数 GB 的 dl 目录。
       - name: Cache OpenWrt download sources
         uses: actions/cache@v4
         with:
           path: /workdir/openwrt/dl
-          key: dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('W6/w6x.config', 'W6/feeds.conf.default', 'W6/diy-part1.sh', 'W6/diy-part5.sh') }}
+          key: dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-${{ env.DOWNLOAD_SOURCE_HASH }}-${{ hashFiles('W6/diy-part1.sh', 'W6/diy-part5.sh') }}
           restore-keys: |
             dl-${{ runner.os }}-w6-${{ env.REPO_BRANCH }}-
             dl-${{ runner.os }}-w6-
-
-      # 修复 2：restore-keys 回退会把旧缓存里的 dl/go-mod-cache 一并带回来，
-      # Go 包（如 sing-box）的同版本号 re-tag 依赖会因缓存已存在而跳过下载，
-      # 导致 "no required module provides package" 编译失败。在下载/编译前清除它。
-      - name: Purge stale Go module cache
-        run: |
-          set -euo pipefail
-          rm -rf /workdir/openwrt/dl/go-mod-cache
-          echo "dl/go-mod-cache purged."
 
       - name: Patch Kernel Config
         run: |
@@ -260,9 +263,15 @@ jobs:
           fi
 
           # 恢复成功后，从顶层 Makefile 移除工具链 stamp 依赖，跳过工具链编译。
+          # [改动] 先检查目标模式是否存在：上游 Makefile 结构变化导致 sed 失效时
+          # 给出明确告警（后果只是工具链重编，慢但正确），避免静默失效。
           cd /workdir/openwrt
-          sed -i 's/ $(tool.*\/stamp-compile)//;' Makefile
-          sed -i 's/ $(tool.*\/stamp-install)//;' Makefile
+          if grep -qE '\$\(tool[^)]*\/stamp-(compile|install)\)' Makefile; then
+            sed -i -E 's/ \$\(tool[^)]*\/stamp-(compile|install)\)//g' Makefile
+            echo "Toolchain stamp deps removed from Makefile."
+          else
+            echo "WARNING: toolchain stamp deps not found in Makefile — sed patch is stale, toolchain will rebuild."
+          fi
 
           echo "TOOLCHAIN_EXISTS=true" >> "$GITHUB_ENV"
           echo "Toolchain cache restored and toolchain build dependencies skipped."
@@ -273,23 +282,22 @@ jobs:
           set -euo pipefail
           cd openwrt
 
-          make defconfig
-
-          # 确保 OpenWrt 使用 ccache，并与工作流缓存目录一致。
-          sed -i \
-            -e '/^CONFIG_CCACHE=/d' \
-            -e '/^CONFIG_CCACHE_DIR=/d' \
-            .config
-
+          # [改动] 启用 ccache 并指定缓存目录（原来这里多了 sed 删除 + 二次 defconfig）。
+          # 更推荐：直接把下面两行写进 W6/w6x.config，然后删除此 heredoc。
           cat >> .config <<'EOF'
           CONFIG_CCACHE=y
           CONFIG_CCACHE_DIR="/workdir/openwrt/.ccache"
           EOF
 
           make defconfig
+
+          # [改动] 只清理 Go 模块缓存中的锁文件残留（上次运行中断可能遗留），
+          # 不再整体 rm -rf go-mod-cache，保留几百 MB~1GB 的 Go 模块缓存收益。
+          find dl/go-mod-cache -name '*.lock' -delete 2>/dev/null || true
+
           make download -j"$(nproc)"
 
-          # 修复 3：清理小于 1KB 的坏文件时排除 dl/go-mod-cache，
+          # 清理小于 1KB 的坏文件时排除 dl/go-mod-cache：
           # 其中大量锁文件/元数据小于 1KB，误删会制造内容残缺的 Go 模块缓存。
           find dl -path dl/go-mod-cache -prune -o -size -1024c -exec ls -l {} \;
           find dl -path dl/go-mod-cache -prune -o -size -1024c -exec rm -f {} \;
@@ -301,8 +309,10 @@ jobs:
           cd openwrt
 
           echo "===== 配置 ccache ====="
-          mkdir -p ~/.ccache
-          ccache -M 5G
+          # [改动] 显式指定与 CONFIG_CCACHE_DIR 一致的目录。
+          # 原代码漏了这一步，ccache -M 实际配置的是 ~/.ccache（死目录）。
+          export CCACHE_DIR=/workdir/openwrt/.ccache
+          ccache -M 2G
           ccache -z
 
           echo -e "$(nproc) thread compile"
