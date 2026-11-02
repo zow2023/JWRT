@@ -13,7 +13,7 @@ fi
 git clone https://github.com/gSpotx2f/luci-app-cpu-status package/luci-app-cpu-status
 git clone https://github.com/gSpotx2f/luci-app-interfaces-statistics package/luci-app-interfaces-statistics
 git clone https://github.com/gSpotx2f/luci-app-temp-status package/luci-app-temp-status
-git clone https://github.com/muink/luci-app-tn-netports package/luci-app-tn-netports
+git clone https://github.com/zow2023/luci-app-tn-netports package/luci-app-tn-netports
 #git clone https://github.com/gSpotx2f/luci-app-cpu-perf package/luci-app-cpu-perf
 
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
