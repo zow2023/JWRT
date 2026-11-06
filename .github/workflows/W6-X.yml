@@ -50,7 +50,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # [保留自第二份] 防止同 branch 并发构建竞争同一个缓存 Release（排队而不是取消）
     concurrency:
       group: w6x-build-${{ github.event.inputs.branch || 'default' }}
@@ -84,7 +84,7 @@ jobs:
           sudo rm -rf /var/lib/apt/lists/*
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
-          sudo chown $USER:$GROUPS /workdir
+          sudo install -o "$USER" -g "$USER" -d /workdir
 
       - name: Clone source code
         working-directory: /workdir
