@@ -14,7 +14,7 @@ on:
         default: 'false'
       # [保留自第二份] 第一份的步骤里引用了这两个输入却从未声明，属于无效功能；此处补全声明
       clean_cache:
-        description: '清空远端工具链缓存后重建 (true/false)'
+        description: '删除旧工具链缓存；本次编译成功后重新写入缓存 (true/false)'
         required: false
         default: 'false'
       skip_saving:
@@ -85,21 +85,18 @@ jobs:
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo install -o "$USER" -g "$USER" -d /workdir
-
       - name: Clone source code
         working-directory: /workdir
         run: |
           df -hT $PWD
           git clone $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
       - name: Load custom feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
-
       - name: Update feeds
         run: cd openwrt && ./scripts/feeds update -a
 
@@ -113,7 +110,6 @@ jobs:
           # TODO: 建议固定到已知可用的 commit SHA，避免上游漂移导致偶发失败
           git clone --depth 1 https://github.com/sbwml/packages_lang_rust.git feeds/packages/lang/rust
           ./scripts/feeds install -f rust
-
       - name: Load custom configuration
         run: |
           [ -e files ] && mv files openwrt/files
@@ -121,7 +117,6 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
-
       - name: SSH connection to Actions
         uses: P3TERX/ssh2actions@v1.0.0
         if: github.event.inputs.ssh == 'true' || contains(github.event.action, 'ssh')
@@ -145,7 +140,6 @@ jobs:
             sed -i '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
             echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
           done
-
       # [关键顺序，保留自第二份] 先 make defconfig 展开 .config，再计算缓存 key；
       # 第一份在 defconfig 之前 grep 未展开的配置，且 set -euo pipefail 下 grep 无匹配
       # 会直接令整个 job 失败——该缺陷随死步骤一并移除。
@@ -187,7 +181,6 @@ jobs:
           echo "Toolchain source hash: ${TOOLCHAIN_SOURCE_HASH}"
           echo "Toolchain config hash: ${TOOLCHAIN_CONFIG_HASH}"
           echo "Toolchain cache tag:   ${TOOLCHAIN_TAG}"
-
       # [唯一缓存机制：Release 化的 cachewrtbuild 策略]
       # - 保留第二份的增量编译核心（与 cachewrtbuild/fetch.js 同源）：
       #   命中缓存后从顶层 Makefile 剥离 toolchain stamp 依赖，跳过工具链编译；
@@ -206,6 +199,11 @@ jobs:
             echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
             exit 0
           fi
+          # 缓存校验失败时删除对应 Release，避免坏缓存跨运行持续存在。
+          invalidate_cache_release() {
+            echo "Invalidate broken cache Release: ${TOOLCHAIN_TAG}"
+            gh release delete "$TOOLCHAIN_TAG" -R "$GITHUB_REPOSITORY" -y --cleanup-tag || true
+          }
           mkdir -p /tmp/tcache
           if ! gh release download "$TOOLCHAIN_TAG" -R "$GITHUB_REPOSITORY" \
                -D /tmp/tcache -p 'toolchain.tar.zst-*' -p 'ccache.tar.zst-*'; then
@@ -216,24 +214,44 @@ jobs:
           fi
           if ! ls /tmp/tcache/toolchain.tar.zst-* >/dev/null 2>&1; then
             echo "Cache miss: 工具链分卷缺失, 将完整编译工具链"
+            invalidate_cache_release
+            rm -rf /tmp/tcache
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # 先检查压缩包目录清单，避免把缺少关键目录的残缺缓存解压进工作树。
+          if ! cat /tmp/tcache/toolchain.tar.zst-* | tar -I zstd -tf - > /tmp/tcache/toolchain.contents; then
+            echo "Cache miss: 工具链归档损坏或无法读取目录清单"
+            invalidate_cache_release
+            rm -rf /tmp/tcache
+            echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if ! grep -Eq '^staging_dir/host/?$' /tmp/tcache/toolchain.contents || \
+             ! grep -Eq '^staging_dir/toolchain-[^/]+/?$' /tmp/tcache/toolchain.contents; then
+            echo "Cache miss: 归档缺少 staging_dir/host 或 staging_dir/toolchain-*，拒绝恢复"
+            invalidate_cache_release
             rm -rf /tmp/tcache
             echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
             exit 0
           fi
           if ! cat /tmp/tcache/toolchain.tar.zst-* | tar -I zstd -xf - -C /workdir/openwrt; then
             echo "工具链解压失败, 按缓存未命中处理"
-            rm -rf /workdir/openwrt/staging_dir /workdir/openwrt/build_dir/host* \
+            invalidate_cache_release
+            rm -rf /workdir/openwrt/staging_dir /workdir/openwrt/build_dir/host \
                    /workdir/openwrt/build_dir/hostpkg /workdir/openwrt/tmp/.build
             rm -rf /tmp/tcache
             echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
             exit 0
           fi
           shopt -s nullglob
-          HOST_PATHS=(/workdir/openwrt/staging_dir/host*)
-          TOOL_PATHS=(/workdir/openwrt/staging_dir/tool*)
-          if (( ${#HOST_PATHS[@]} == 0 || ${#TOOL_PATHS[@]} == 0 )); then
-            echo "Cache miss: 解压后缺少 staging_dir/host* 或 tool*"
-            rm -rf /workdir/openwrt/staging_dir
+          HOST_PATHS=(/workdir/openwrt/staging_dir/host)
+          TOOL_PATHS=(/workdir/openwrt/staging_dir/toolchain-*)
+          if [ ! -d "${HOST_PATHS[0]}" ] || (( ${#TOOL_PATHS[@]} == 0 )); then
+            echo "Cache miss: 解压后缺少 staging_dir/host 或 staging_dir/toolchain-*"
+            invalidate_cache_release
+            rm -rf /workdir/openwrt/staging_dir /workdir/openwrt/build_dir/host \
+                   /workdir/openwrt/build_dir/hostpkg /workdir/openwrt/tmp/.build
             rm -rf /tmp/tcache
             echo "TOOLCHAIN_EXISTS=false" >> "$GITHUB_ENV"
             exit 0
@@ -262,7 +280,6 @@ jobs:
           [ -d /workdir/openwrt/build_dir/host ] && echo "build_dir/host 已恢复" || echo "WARNING: build_dir/host 未恢复"
           [ -d /workdir/openwrt/tmp/.build ] && echo "tmp/.build stamps 已恢复" || true
           echo "===== verify done ====="
-
       - name: Download packages
         working-directory: /workdir/openwrt
         run: |
@@ -275,7 +292,6 @@ jobs:
             make download -j1 V=s
           }
           find dl -size -1024c -exec rm -f {} \; || true
-
       - name: Compile the firmware
         id: compile
         working-directory: /workdir/openwrt
@@ -291,12 +307,10 @@ jobs:
           ccache -z
           export FORCE_UNSAFE_CONFIGURE=1
           make -j$(($(nproc)+1)) || make -j1 V=s
-
           echo "status=success" >> $GITHUB_OUTPUT
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
       - name: ccache diagnostics
         if: always()
         working-directory: /workdir/openwrt
@@ -310,7 +324,6 @@ jobs:
           ccache -sv || ccache -s || true
           grep -oE 'result: miss [^ ]*' /tmp/ccache.log 2>/dev/null | sort | uniq -c | sort -rn | head -20 \
             || echo "(no ccache.log; 需要在编译步骤 export CCACHE_LOGFILE 才能采集)"
-
       # [save 阶段] 与 restore 共用 TOOLCHAIN_TAG 一个 Release，全流程唯一缓存机制。
       # 工具链持久化到 Release：不受 actions/cache 7 天过期与 10GB 配额限制。
       # 相比第二份的修复：只打包实际存在的目录，任一路径缺失不再导致 tar 非零退出
@@ -324,9 +337,7 @@ jobs:
         run: |
           set -e
           COMMIT_SHORT=$(git rev-parse --short HEAD)
-          if [ "${{ github.event.inputs.clean_cache }}" = "true" ]; then
-            echo "clean_cache=true: 跳过回写"; exit 0
-          fi
+          # clean_cache 只控制 restore 阶段删除旧缓存并强制 miss；本次成功构建仍应回写新缓存。
           if [ "${{ github.event.inputs.skip_saving }}" = "true" ]; then
             echo "skip_saving=true: 跳过回写"; exit 0
           fi
@@ -338,18 +349,32 @@ jobs:
           #   若你确认 tmp/.build 中含有非工具链步骤的 stamp，可从 CANDIDATES 中移除该路径
           #   （多跑一次 target prepare 比跳过不该跳过的步骤安全）。
           shopt -s nullglob
-          CANDIDATES=(staging_dir/host staging_dir/hostpkg staging_dir/tool-*
+          # OpenWrt 的工具链目录名是 toolchain-*，不是 tool-*。
+          # 只有 host 与至少一个 toolchain-* 都存在时，才保存可恢复的工具链缓存。
+          CANDIDATES=(staging_dir/host staging_dir/hostpkg staging_dir/toolchain-*
                       build_dir/host build_dir/hostpkg tmp/.build)
           TPATHS=()
           for p in "${CANDIDATES[@]}"; do
             if [ -e "$p" ]; then TPATHS+=("$p"); fi
           done
           shopt -u nullglob
-          if [ ${#TPATHS[@]} -gt 0 ]; then
+          HAVE_HOST=false
+          HAVE_TOOLCHAIN=false
+          [ -d staging_dir/host ] && HAVE_HOST=true
+          compgen -G 'staging_dir/toolchain-*' >/dev/null && HAVE_TOOLCHAIN=true
+          if [ "$HAVE_HOST" = "true" ] && [ "$HAVE_TOOLCHAIN" = "true" ]; then
             tar -cf - "${TPATHS[@]}" | zstd -T0 -3 -o /tmp/cacheout/toolchain.tar.zst
-            echo "toolchain archive: $(du -h /tmp/cacheout/toolchain.tar.zst | cut -f1)"
+            if tar -I zstd -tf /tmp/cacheout/toolchain.tar.zst > /tmp/cacheout/toolchain.contents && \
+               grep -Eq '^staging_dir/host/?$' /tmp/cacheout/toolchain.contents && \
+               grep -Eq '^staging_dir/toolchain-[^/]+/?$' /tmp/cacheout/toolchain.contents; then
+              echo "toolchain archive: $(du -h /tmp/cacheout/toolchain.tar.zst | cut -f1)"
+            else
+              echo "::warning::工具链归档校验失败，丢弃该归档，本轮只回写 ccache"
+              rm -f /tmp/cacheout/toolchain.tar.zst
+            fi
+            rm -f /tmp/cacheout/toolchain.contents
           else
-            echo "::warning::没有可打包的工具链目录, 本轮仅回写 ccache"
+            echo "::warning::缺少 staging_dir/host 或 staging_dir/toolchain-*，不生成不完整的工具链缓存"
           fi
           if [ -d .ccache ]; then
             tar -cf - .ccache | zstd -T0 -3 -o /tmp/cacheout/ccache.tar.zst
@@ -412,7 +437,6 @@ jobs:
                 fi
               done
           echo "===== 清理完毕 ====="
-
       - name: Upload bin directory
         uses: actions/upload-artifact@v4
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
@@ -428,7 +452,6 @@ jobs:
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
-
       - name: Upload firmware directory
         uses: actions/upload-artifact@v4
         if: steps.organize.outputs.status == 'success' && !cancelled()
