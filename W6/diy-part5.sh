@@ -19,7 +19,7 @@ git clone https://github.com/zow2023/luci-app-tn-netports package/luci-app-tn-ne
 rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/luci/applications/luci-app-adguardhome
-git clone https://github.com/zow2023/luci-app-adguardhome.git package/luci-app-adguardhome
+#git clone https://github.com/zow2023/luci-app-adguardhome.git package/luci-app-adguardhome
 rm -rf package/luci-app-adguardhome/patches
 
 git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
