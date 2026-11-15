@@ -121,16 +121,6 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
-          # 注入 OpenWrt 顶层内核构建选项 (避免误删同前缀配置)
-          for opt in \
-            CONFIG_KERNEL_CGROUP_BPF \
-            CONFIG_KERNEL_FUNCTION_TRACER \
-            CONFIG_KERNEL_DYNAMIC_FTRACE
-          do
-            sed -i "/^${opt}=/d; /^# ${opt} is not set/d" .config
-            echo "${opt}=y" >> .config
-          done
-
       - name: SSH connection to Actions
         uses: P3TERX/ssh2actions@v1.0.0
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
@@ -149,8 +139,7 @@ jobs:
               CONFIG_BPF_JIT \
               CONFIG_BPF_STREAM_PARSER \
               CONFIG_NETKIT \
-              CONFIG_STREAM_PARSER \
-              CONFIG_NF_CONNTRACK_CHAIN_EVENTS
+              CONFIG_STREAM_PARSER
             do
               sed -i "/^${opt}=/d; /^# ${opt} is not set/d" "$cfg"
               echo "${opt}=y" >> "$cfg"
