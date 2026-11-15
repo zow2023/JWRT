@@ -129,16 +129,17 @@ jobs:
           cd openwrt
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
             echo "Checking $cfg"
-            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
-            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
-            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
-            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
-            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
-            echo "CONFIG_BPF_JIT=y" >> "$cfg"
-            sed -i '/CONFIG_NETKIT/d' "$cfg"
-            echo "CONFIG_NETKIT=y" >> "$cfg"
-            sed -i '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
-            echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
+            for opt in \
+              CONFIG_NET_SCH_BPF \
+              CONFIG_BPF_SYSCALL \
+              CONFIG_BPF_JIT \
+              CONFIG_BPF_STREAM_PARSER \
+              CONFIG_NETKIT \
+              CONFIG_STREAM_PARSER
+            do
+              sed -i "/^${opt}=/d; /^# ${opt} is not set/d" "$cfg"
+              echo "${opt}=y" >> "$cfg"
+            done
           done
       # [关键顺序，保留自第二份] 先 make defconfig 展开 .config，再计算缓存 key；
       # 第一份在 defconfig 之前 grep 未展开的配置，且 set -euo pipefail 下 grep 无匹配
