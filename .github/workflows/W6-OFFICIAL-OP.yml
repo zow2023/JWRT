@@ -196,16 +196,17 @@ jobs:
           cd openwrt
           for cfg in $(find target/linux/mediatek -name "config-6*"); do
             echo "Checking $cfg"
-            sed -i '/CONFIG_NET_SCH_BPF/d' "$cfg"
-            echo "CONFIG_NET_SCH_BPF=y" >> "$cfg"
-            sed -i '/CONFIG_BPF_SYSCALL/d' "$cfg"
-            echo "CONFIG_BPF_SYSCALL=y" >> "$cfg"
-            sed -i '/CONFIG_BPF_JIT/d' "$cfg"
-            echo "CONFIG_BPF_JIT=y" >> "$cfg"
-            sed -i '/CONFIG_NETKIT/d' "$cfg"
-            echo "CONFIG_NETKIT=y" >> "$cfg"
-            sed -i '/CONFIG_NF_CONNTRACK_CHAIN_EVENTS/d' "$cfg"
-            echo "CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y" >> "$cfg"
+            for opt in \
+              CONFIG_NET_SCH_BPF \
+              CONFIG_BPF_SYSCALL \
+              CONFIG_BPF_JIT \
+              CONFIG_BPF_STREAM_PARSER \
+              CONFIG_NETKIT \
+              CONFIG_STREAM_PARSER
+            do
+              sed -i "/^${opt}=/d; /^# ${opt} is not set/d" "$cfg"
+              echo "${opt}=y" >> "$cfg"
+            done
           done
 
       # 10. 预下载依赖包 (多线程下载 + 自动清理破坏包)
