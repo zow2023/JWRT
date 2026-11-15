@@ -184,7 +184,6 @@ jobs:
             CONFIG_BPF_JIT \
             CONFIG_BPF_STREAM_PARSER \
             CONFIG_NETKIT \
-            CONFIG_NF_CONNTRACK_CHAIN_EVENTS \
             CONFIG_FUNCTION_TRACER \
             CONFIG_DYNAMIC_FTRACE
           do
