@@ -210,6 +210,23 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
+    - name: Patch Kernel Config
+      run: |
+          cd openwrt
+          for cfg in $(find target/linux/mediatek -name "config-6*"); do
+            echo "Checking $cfg"
+            for opt in \
+              CONFIG_NET_SCH_BPF \
+              CONFIG_BPF_SYSCALL \
+              CONFIG_BPF_JIT \
+              CONFIG_NETKIT \
+              CONFIG_STREAM_PARSER
+            do
+              sed -i "/^${opt}=/d; /^# ${opt} is not set/d" "$cfg"
+              echo "${opt}=y" >> "$cfg"
+            done
+          done
+
     - name: Download package
       id: package
       run: |
