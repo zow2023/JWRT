@@ -146,6 +146,17 @@ jobs:
             done
           done
 
+
+      - name: Check BTF build tools
+        run: |
+          set -x
+          uname -a
+          lsb_release -a
+          pahole --version || true
+          bpftool version || true
+          gcc --version
+          clang --version || true
+
       - name: Download package
         id: package
         run: |
@@ -198,6 +209,25 @@ jobs:
 
           echo "===== ccache 编译统计 ====="
           ccache -s
+
+
+      - name: Check E8450 kernel BTF
+        run: |
+          set -x
+
+          find build_dir -path '*/linux-6.18.60/.config' -print
+
+          find build_dir -path '*/linux-6.18.60/.config' \
+          -exec grep -E \
+          'CONFIG_DEBUG_INFO=|CONFIG_DEBUG_INFO_BTF=|CONFIG_DEBUG_INFO_BTF_MODULES=|CONFIG_DEBUG_INFO_REDUCED=|CONFIG_BPF_SYSCALL=' {} \;
+
+          find build_dir -type f -name vmlinux -exec sh -c '
+          echo "===== $1 ====="
+          ls -lh "$1"
+          file "$1"
+          readelf -S "$1" | grep -E "\.BTF|\.debug_info" || true
+          bpftool btf dump file "$1" format raw 2>&1 | head -30
+          ' _ {} \;
 
       - name: Upload bin directory
         uses: actions/upload-artifact@v4
