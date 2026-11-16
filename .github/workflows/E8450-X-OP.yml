@@ -211,23 +211,87 @@ jobs:
           ccache -s
 
 
-      - name: Check E8450 kernel BTF
+      - name: Diagnose E8450 kernel BTF
+        shell: bash
         run: |
-          set -x
+           set -u
 
-          find build_dir -path '*/linux-6.18.60/.config' -print
+           ROOT="$GITHUB_WORKSPACE"
 
-          find build_dir -path '*/linux-6.18.60/.config' \
-          -exec grep -E \
-          'CONFIG_DEBUG_INFO=|CONFIG_DEBUG_INFO_BTF=|CONFIG_DEBUG_INFO_BTF_MODULES=|CONFIG_DEBUG_INFO_REDUCED=|CONFIG_BPF_SYSCALL=' {} \;
+           echo "===== Workspace ====="
+           pwd
+           echo "GITHUB_WORKSPACE=$ROOT"
+           ls -lah "$ROOT"
 
-          find build_dir -type f -name vmlinux -exec sh -c '
-          echo "===== $1 ====="
-          ls -lh "$1"
-          file "$1"
-          readelf -S "$1" | grep -E "\.BTF|\.debug_info" || true
-          bpftool btf dump file "$1" format raw 2>&1 | head -30
-          ' _ {} \;
+           echo "===== Locate build_dir ====="
+           find "$ROOT" -type d -name build_dir -print 2>/dev/null || true
+
+           echo "===== Locate Linux 6.18.60 config ====="
+           mapfile -d '' CONFIGS < <(
+           find "$ROOT" -type f \
+           -path '*/build_dir/*/linux-6.18.60/.config' \
+           -print0 2>/dev/null
+           )
+
+           if ((${#CONFIGS[@]} == 0)); then
+           echo "ERROR: Linux 6.18.60 .config not found"
+           echo "===== Locate build and staging directories ====="
+           find "$ROOT" -maxdepth 7 -type d \
+           \( -name build_dir -o -name staging_dir \) \
+           -print 2>/dev/null || true
+           exit 0
+           fi
+
+           for cfg in "${CONFIGS[@]}"; do
+           echo "===== Kernel config: $cfg ====="
+
+           grep -E \
+           'CONFIG_DEBUG_INFO=|CONFIG_DEBUG_INFO_BTF=|CONFIG_DEBUG_INFO_BTF_MODULES=|CONFIG_DEBUG_INFO_REDUCED=|CONFIG_BPF_SYSCALL=' \
+           "$cfg" || true
+
+           SRCROOT="${cfg%%/build_dir/*}"
+
+           echo "===== X-WRT built pahole ====="
+           PAHOLE="$SRCROOT/staging_dir/host/bin/pahole"
+
+           if [ -x "$PAHOLE" ]; then
+           echo "Path: $PAHOLE"
+           "$PAHOLE" --version
+           else
+           echo "X-WRT staged pahole not found: $PAHOLE"
+           fi
+
+           echo "===== System pahole ====="
+           command -v pahole || true
+           pahole --version || true
+
+           echo "===== Kernel vmlinux ====="
+           KDIR="${cfg%/.config}"
+           VMLINUX="$KDIR/vmlinux"
+
+           if [ -f "$VMLINUX" ]; then
+           ls -lh "$VMLINUX"
+           file "$VMLINUX"
+           readelf -S "$VMLINUX" | grep -E '\.BTF|\.debug_info' || true
+
+           echo "===== Test vmlinux BTF ====="
+           if bpftool btf dump file "$VMLINUX" format raw \
+            > "$RUNNER_TEMP/e8450-btf.txt" 2>&1; then
+            sed -n '1,30p' "$RUNNER_TEMP/e8450-btf.txt"
+            echo "BTF_PARSE=OK"
+            else
+            rc=$?
+            sed -n '1,30p' "$RUNNER_TEMP/e8450-btf.txt"
+            echo "BTF_PARSE=FAILED, exit=$rc"
+            fi
+           else
+           echo "vmlinux not found at: $VMLINUX"
+           find "$SRCROOT/build_dir" -type f \
+           -name vmlinux -path '*linux-6.18.60*' \
+           -print 2>/dev/null || true
+           fi
+           done
+           ' _ {} \;
 
       - name: Upload bin directory
         uses: actions/upload-artifact@v4
