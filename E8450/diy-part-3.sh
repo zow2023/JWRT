@@ -15,6 +15,7 @@ rm -rf package/luci-app-adguardhome/patches
 git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
 #git clone https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
 
+git clone https://github.com/QiuSimons/vmlinux-btf.git package/vmlinux-btf
 git clone https://github.com/zow2023/luci-app-meow package/meow
 git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/luci-app-honk package/honk
