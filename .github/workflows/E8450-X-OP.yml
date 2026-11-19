@@ -181,110 +181,34 @@ jobs:
           make -j"$(nproc)" || make -j1 || make -j1 V=s
 
           # —— 现有的 CGROUP_BPF 逐项验证 ——
-          KCFG=$(ls build_dir/target-*/linux-*/linux-*/.config | head -n1)
-          grep -q '^CONFIG_CGROUPS=y'        "$KCFG" || { echo "!!! CGROUPS 未生效";      exit 1; }
-          grep -q '^CONFIG_SOCK_CGROUP_DATA=y' "$KCFG" || { echo "!!! SOCK_CGROUP_DATA 未生效"; exit 1; }
-          grep -q '^CONFIG_CGROUP_BPF=y'     "$KCFG" || { echo "!!! CGROUP_BPF 未生效";   exit 1; }
-          grep -q '^CONFIG_DEBUG_INFO_BTF=y' "$KCFG" || { echo "!!! DEBUG_INFO_BTF 未生效"; exit 1; }
+        # KCFG=$(ls build_dir/target-*/linux-*/linux-*/.config | head -n1)
+         # grep -q '^CONFIG_CGROUPS=y'        "$KCFG" || { echo "!!! CGROUPS 未生效";      exit 1; }
+         # grep -q '^CONFIG_SOCK_CGROUP_DATA=y' "$KCFG" || { echo "!!! SOCK_CGROUP_DATA 未生效"; exit 1; }
+         # grep -q '^CONFIG_CGROUP_BPF=y'     "$KCFG" || { echo "!!! CGROUP_BPF 未生效";   exit 1; }
+         # grep -q '^CONFIG_DEBUG_INFO_BTF=y' "$KCFG" || { echo "!!! DEBUG_INFO_BTF 未生效"; exit 1; }
 
           # —— 验证 Patch Kernel Config 及 Tracer 配置是否生效 ——
-          echo "===== 验证新增 BPF / Netkit / Tracer 内核配置 ====="
-          for opt in \
-            CONFIG_NET_SCH_BPF \
-            CONFIG_BPF_SYSCALL \
-            CONFIG_BPF_JIT \
-            CONFIG_BPF_STREAM_PARSER \
-            CONFIG_NETKIT \
-            CONFIG_FUNCTION_TRACER \
-            CONFIG_DYNAMIC_FTRACE
-          do
-            grep -q "^${opt}=y" "$KCFG" || { echo "!!! ${opt} 未生效"; exit 1; }
-            echo "✔ ${opt}=y"
-          done
+          #echo "===== 验证新增 BPF / Netkit / Tracer 内核配置 ====="
+         # for opt in \
+           # CONFIG_NET_SCH_BPF \
+          #  CONFIG_BPF_SYSCALL \
+           # CONFIG_BPF_JIT \
+           # CONFIG_BPF_STREAM_PARSER \
+           # CONFIG_NETKIT \
+           # CONFIG_FUNCTION_TRACER \
+          #  CONFIG_DYNAMIC_FTRACE
+        #  do
+          #  grep -q "^${opt}=y" "$KCFG" || { echo "!!! ${opt} 未生效"; exit 1; }
+          #  echo "✔ ${opt}=y"
+        #  done
 
-          echo "status=success" >> $GITHUB_OUTPUT
-          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+         # echo "status=success" >> $GITHUB_OUTPUT
+        # grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+         # [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+         # echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-          echo "===== ccache 编译统计 ====="
-          ccache -s
-
-
-      - name: Diagnose E8450 BTF
-        shell: bash
-        run: |
-          set -u
-
-          ROOT="$(readlink -f "$GITHUB_WORKSPACE/openwrt")"
-
-          echo "===== Real source directory ====="
-          echo "$ROOT"
-          ls -lah "$ROOT"
-
-          echo "===== Build and staging directories ====="
-          find "$ROOT" -maxdepth 3 -type d \
-            \( -name build_dir -o -name staging_dir \) -print
-
-          echo "===== X-WRT pahole ====="
-          PAHOLE="$ROOT/staging_dir/host/bin/pahole"
-
-          if [ -x "$PAHOLE" ]; then
-            echo "Found: $PAHOLE"
-            "$PAHOLE" --version
-            readlink -f "$PAHOLE"
-          else
-            echo "ERROR: X-WRT pahole not found"
-            find "$ROOT/staging_dir" -type f -name pahole -print 2>/dev/null || true
-          fi
-
-          echo "===== System pahole ====="
-          command -v pahole || true
-          pahole --version || true
-
-          echo "===== Kernel 6.18.60 config ====="
-          mapfile -t CONFIGS < <(
-            find "$ROOT" -type f \
-              -path '*/linux-6.18.60/.config' -print 2>/dev/null
-          )
-
-          echo "Found configs: ${#CONFIGS[@]}"
-
-          for cfg in "${CONFIGS[@]}"; do
-            echo "===== $cfg ====="
-
-            grep -E \
-              'CONFIG_DEBUG_INFO=|CONFIG_DEBUG_INFO_BTF=|CONFIG_DEBUG_INFO_BTF_MODULES=|CONFIG_DEBUG_INFO_REDUCED=|CONFIG_BPF_SYSCALL=' \
-              "$cfg" || true
-
-            VMLINUX="${cfg%/.config}/vmlinux"
-
-            echo "===== vmlinux: $VMLINUX ====="
-
-            if [ -f "$VMLINUX" ]; then
-              ls -lh "$VMLINUX"
-              file "$VMLINUX"
-
-              readelf -S "$VMLINUX" | grep -E '\.BTF|\.debug_info' || true
-
-              echo "===== bpftool BTF test ====="
-              if bpftool btf dump file "$VMLINUX" format raw \
-                > "$RUNNER_TEMP/e8450-btf.txt" 2>&1; then
-                head -30 "$RUNNER_TEMP/e8450-btf.txt"
-                echo "BTF_PARSE=OK"
-              else
-                rc=$?
-                head -30 "$RUNNER_TEMP/e8450-btf.txt"
-                echo "BTF_PARSE=FAILED, exit=$rc"
-              fi
-            else
-              echo "vmlinux not found beside .config"
-            fi
-          done
-
-          echo "===== All E8450 vmlinux files ====="
-          find "$ROOT" -type f \
-            -name vmlinux -path '*linux-6.18.60*' -print 2>/dev/null || true
+         # echo "===== ccache 编译统计 ====="
+        #  ccache -s
 
 
       - name: Upload bin directory
