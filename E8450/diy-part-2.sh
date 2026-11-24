@@ -14,7 +14,6 @@
 #git clone https://github.com/4IceG/luci-app-parentalcontrol package/luci-app-parentalcontrol
 
 git clone https://github.com/rule2c/luci-app-netcontrol package/luci-app-netcontrol
-git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
 
 ##git clone https://github.com/brvphoenix/luci-app-wrtbwmon package/luci-app-wrtbwmon
 
@@ -34,6 +33,9 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 #git clone https://github.com/zow2023/luci-app-adguardhome package/luci-app-adguardhome
 rm -rf package/luci-app-adguardhome/patches
 
+rm -rf feeds/luci/applications/luci-theme-footstrap
+git clone https://github.com/VizzleTF/luci-theme-footstrap package/luci-theme-footstrap
+
 rm -rf feeds/luci/applications/luci-app-dae
 rm -rf feeds/luci/applications/luci-app-daed
 rm -rf feeds/luci/applications/luci-app-homeproxy
@@ -44,7 +46,7 @@ rm -rf feeds/packages/net/{dae,daed}
 
 #git clone https://github.com/QiuSimons/luci-app-dae -b kix package/dae
 
-git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
+#git clone https://github.com/zow2023/InfinityDuck package/new/InfinityDuck
 git clone https://github.com/zow2023/openwrt_helloworld package/helloworld
 git clone https://github.com/zow2023/luci-app-meow package/meow
 git clone https://github.com/zow2023/luci-app-honk package/honk
